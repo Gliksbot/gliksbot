@@ -1,0 +1,93 @@
+{
+  "runtime": {
+    "db_path": "./dexter.db",
+    "enable_fts": true,
+    "stm_ratio": 0.5,
+    "stm_max_bytes": 0,
+    "stm_min_free_bytes": 268435456,
+    "sandbox": {
+      "provider": "hyperv",
+      "hyperv": {
+        "vm_name": "DexterVM",
+        "vm_user": "Administrator",
+        "vm_password_env": "DEXTER_VM_PASSWORD",
+        "host_shared_dir": "m:/gliksbot/vm_shared",
+        "vm_shared_dir": "C:/HostShare",
+        "python_exe": "python",
+        "timeout_sec": 120
+      }
+    }
+  },
+  "collaboration_contract": "You are a member of Dexter's team. You MUST collaborate via files, watch peers' files, obey Dexter. For action requests, PROPOSE a SKILL with this template and keep code pure (no os/subprocess/network): === SKILL_SPEC === ... as documented ... === Then provide CODE block with `run(payload: dict) -> dict` and inline pytest tests. End your message with \"VOTE: <slot>\" on a single line.",
+  "models": {
+    "dexter": {
+      "enabled": true,
+      "provider": "ollama",
+      "endpoint": "http://localhost:11434",
+      "model": "llama3.1:8b-instruct-q4_0",
+      "identity": "You are Dexter, the orchestrator. You design SkillSpecs, enforce tests‑first, promote safe skills, and execute them.",
+      "role": "Chief Orchestrator",
+      "prompt": "Keep outputs concise for UI; when building a skill, follow the exact template.",
+      "params": {
+        "temperature": 0.2,
+        "top_p": 0.9,
+        "num_ctx": 4096
+      }
+    },
+    "openai": {
+      "enabled": false,
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "api_key_env": "OPENAI_API_KEY",
+      "identity": "You are an analyst and coder.",
+      "role": "Engineer",
+      "prompt": "Prefer tests‑first.",
+      "params": {
+        "temperature": 0.5
+      }
+    },
+    "nemotron": {
+      "enabled": false,
+      "provider": "nemotron",
+      "endpoint": "https://api.nemotron.ai",
+      "model": "nemotron-340b-instruct",
+      "api_key_env": "NEMOTRON_API_KEY",
+      "identity": "Thorough researcher.",
+      "role": "Planner",
+      "prompt": "Break down tasks into steps.",
+      "params": {
+        "temperature": 0.6
+      }
+    }
+  },
+  "voting": {
+    "weights": {
+      "dexter": 0.5,
+      "openai": 0.3,
+      "nemotron": 0.2
+    }
+  },
+  "campaigns": {
+    "enabled": true,
+    "max_active": 10,
+    "auto_objective_creation": true
+  },
+  "domain": {
+    "name": "www.gliksbot.com",
+    "ssl_enabled": true,
+    "cors_origins": [
+      "https://www.gliksbot.com",
+      "https://gliksbot.com",
+      "http://localhost:3000"
+    ]
+  },
+  "ldap": {
+    "enabled": true,
+    "url": "ldap://gliksbot.com",
+    "base_dn": "DC=gliksbot,DC=com",
+    "domain": "gliksbot.com",
+    "bind_dn_env": "DEXTER_LDAP_BIND_DN",
+    "bind_password_env": "DEXTER_LDAP_BIND_PASSWORD",
+    "allowed_group": "CN=Dexter Users,OU=Groups,DC=gliksbot,DC=com"
+  }
+}
