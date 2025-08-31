@@ -10,12 +10,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+# Authentication imports
+from auth import auth_manager, get_current_user
+
 # Placeholder imports - you'll replace these with actual implementations
 from dexter_brain.config import Config
 from dexter_brain.campaigns import CampaignManager
 from dexter_brain.collaboration import CollaborationManager
 
-CONFIG_PATH = os.environ.get("DEXTER_CONFIG_FILE", "/workspaces/gliksbot/config.json")
+CONFIG_PATH = os.environ.get("DEXTER_CONFIG_FILE", "/home/runner/work/gliksbot/gliksbot/config.json")
 DOWNLOADS_DIR = os.environ.get("DEXTER_DOWNLOADS_DIR", "/tmp/dexter_downloads")
 
 # Load config
@@ -40,6 +43,15 @@ app.add_middleware(
 class HealthOut(BaseModel):
     ok: bool = True
     version: str = "3.0"
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class LoginResponse(BaseModel):
+    token: str
+    user: dict
+    message: str = "Login successful"
 
 class CampaignIn(BaseModel):
     name: str
@@ -73,12 +85,39 @@ class ConfigOut(BaseModel):
 def health():
     return HealthOut()
 
+# Authentication routes
+@app.post("/auth/login", response_model=LoginResponse)
+def login(credentials: LoginRequest):
+    """Login with hardcoded credentials"""
+    user_info = auth_manager.authenticate_user(credentials.username, credentials.password)
+    if not user_info:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid username or password"
+        )
+    
+    token = auth_manager.create_jwt_token(user_info)
+    return LoginResponse(
+        token=token,
+        user=user_info
+    )
+
+@app.post("/auth/logout")
+def logout():
+    """Logout endpoint (token invalidation handled client-side)"""
+    return {"message": "Logged out successfully"}
+
+@app.get("/auth/me")
+def get_current_user_info(current_user: dict = Depends(get_current_user)):
+    """Get current user information"""
+    return current_user
+
 @app.get("/config", response_model=ConfigOut)
-def get_config():
+def get_config(current_user: dict = Depends(get_current_user)):
     return ConfigOut(config=_app_cfg.to_json())
 
 @app.put("/config", response_model=ConfigOut)
-def put_config(payload: Dict[str, Any]):
+def put_config(payload: Dict[str, Any], current_user: dict = Depends(get_current_user)):
     global _app_cfg, _collab_mgr
     if "api_key" in json.dumps(payload).lower():
         raise HTTPException(400, "Do not store API keys in config; use api_key_env names and env vars.")
@@ -104,7 +143,7 @@ def put_config(payload: Dict[str, Any]):
 
 # Campaign routes
 @app.post("/campaigns", response_model=CampaignOut)
-async def create_campaign(payload: CampaignIn):
+async def create_campaign(payload: CampaignIn, current_user: dict = Depends(get_current_user)):
     """Create a new campaign and broadcast to LLMs for planning"""
     if not _campaign_mgr:
         raise HTTPException(500, "Campaign manager not initialized")
@@ -138,7 +177,7 @@ async def create_campaign(payload: CampaignIn):
     )
 
 @app.get("/campaigns")
-async def list_campaigns(status: Optional[str] = None):
+async def list_campaigns(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """List all campaigns"""
     if not _campaign_mgr:
         raise HTTPException(500, "Campaign manager not initialized")
@@ -160,7 +199,7 @@ async def list_campaigns(status: Optional[str] = None):
     ) for c in campaigns]
 
 @app.get("/campaigns/{campaign_id}", response_model=CampaignOut)
-async def get_campaign(campaign_id: str):
+async def get_campaign(campaign_id: str, current_user: dict = Depends(get_current_user)):
     """Get specific campaign details"""
     if not _campaign_mgr:
         raise HTTPException(500, "Campaign manager not initialized")

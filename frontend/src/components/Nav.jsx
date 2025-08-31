@@ -1,7 +1,7 @@
 import React from 'react'
 import { isAuthed } from '../auth'
 
-export default function Nav({ tab, setTab, onLogin, onLogout }){
+export default function Nav({ tab, setTab, onShowLogin, onLogout }){
   const guest = !isAuthed()
   const Tab = ({name,id,allowed=true}) => (
     <button 
@@ -28,10 +28,10 @@ export default function Nav({ tab, setTab, onLogin, onLogout }){
         <div className="flex-1" />
         {guest ? (
           <button 
-            onClick={onLogin} 
+            onClick={onShowLogin} 
             className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-md text-sm"
           >
-            AD Login
+            Login
           </button>
         ) : (
           <button 
