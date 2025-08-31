@@ -235,3 +235,53 @@ Respond with just: VOTE: <llm_name>"""
             await asyncio.sleep(0.5)
         
         return False  # Timeout
+
+    def get_active_sessions(self) -> List[Dict]:
+        """Get list of currently active collaboration sessions"""
+        current_time = time.time()
+        active = []
+        
+        for session_id, session in self.active_sessions.items():
+            # Consider sessions active for up to 5 minutes
+            if current_time - session.get("started_ts", 0) < 300:
+                # Add participant information based on LLM names
+                participants = []
+                for llm_name in session.get("llms", []):
+                    # Map LLM names to slot names
+                    if llm_name.startswith('slot_') or llm_name.startswith('llm_'):
+                        participants.append(llm_name)
+                    else:
+                        # Try to find a matching slot for named LLMs
+                        for slot_name, config in self.config.models.items():
+                            if config.get('identity', '') == llm_name or slot_name == llm_name:
+                                participants.append(slot_name)
+                                break
+                
+                session_copy = session.copy()
+                session_copy['participants'] = participants
+                session_copy['original_request'] = session.get('user_input', '')
+                
+                # Add latest results for each participant
+                session_copy['results'] = {}
+                for llm_name in session.get("llms", []):
+                    slot_results = {}
+                    if llm_name in session.get("proposals", {}):
+                        slot_results['proposal'] = session["proposals"][llm_name]
+                    if llm_name in session.get("refinements", {}):
+                        slot_results['latest_output'] = session["refinements"][llm_name]
+                    if llm_name in session.get("votes", {}):
+                        slot_results['vote'] = session["votes"][llm_name]
+                    
+                    # Map to slot name
+                    slot_name = llm_name
+                    for sname, config in self.config.models.items():
+                        if config.get('identity', '') == llm_name or sname == llm_name:
+                            slot_name = sname
+                            break
+                    
+                    if slot_results:
+                        session_copy['results'][slot_name] = slot_results
+                
+                active.append(session_copy)
+        
+        return active
