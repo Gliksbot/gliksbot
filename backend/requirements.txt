@@ -1,0 +1,22 @@
+# Core dependencies for Dexter v3 backend
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+httpx>=0.25.0
+python-multipart>=0.0.6
+
+# Database and data handling
+aiosqlite>=0.19.0
+pyyaml>=6.0
+
+# Authentication and security
+pyjwt>=2.8.0
+python-ldap3>=2.9.1
+cryptography>=41.0.0
+
+# System monitoring
+psutil>=5.9.0
+
+# Optional development dependencies
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
