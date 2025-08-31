@@ -1,0 +1,171 @@
+import React, { useState, useEffect } from 'react'
+import { api } from '../api'
+
+export default function Downloads() {
+  const [downloads, setDownloads] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    loadDownloads()
+  }, [])
+
+  const loadDownloads = async () => {
+    try {
+      setLoading(true)
+      const { data } = await api.get('/downloads')
+      setDownloads(data?.downloads || [])
+    } catch (error) {
+      console.error('Failed to load downloads:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const downloadFile = async (filename) => {
+    try {
+      const response = await api.get(`/downloads/${filename}`, { responseType: 'blob' })
+      
+      // Create download link
+      const blob = new Blob([response.data])
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      alert('Failed to download file: ' + (error?.response?.data?.detail || error.message))
+    }
+  }
+
+  const deleteFile = async (filename) => {
+    if (!confirm(`Are you sure you want to delete ${filename}?`)) {
+      return
+    }
+
+    try {
+      await api.delete(`/downloads/${filename}`)
+      setDownloads(prev => prev.filter(d => d.filename !== filename))
+      alert('File deleted successfully')
+    } catch (error) {
+      alert('Failed to delete file: ' + (error?.response?.data?.detail || error.message))
+    }
+  }
+
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const getFileIcon = (filename) => {
+    const ext = filename.split('.').pop()?.toLowerCase()
+    switch (ext) {
+      case 'pdf': return '📄'
+      case 'txt': return '📝'
+      case 'json': return '📋'
+      case 'py': return '🐍'
+      case 'js': return '📜'
+      case 'zip': return '📦'
+      case 'csv': return '📊'
+      default: return '📁'
+    }
+  }
+
+  return (
+    <div className="p-4 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Downloads</h1>
+        <button
+          onClick={loadDownloads}
+          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-medium"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-8">Loading downloads...</div>
+      ) : (
+        <div className="space-y-4">
+          {downloads.map((download, index) => (
+            <div key={index} className="border border-slate-700 rounded-lg p-4 bg-slate-900/40">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{getFileIcon(download.filename)}</span>
+                  <div>
+                    <h3 className="font-medium">{download.filename}</h3>
+                    <div className="flex items-center gap-4 text-sm text-slate-400">
+                      <span>{formatFileSize(download.size || 0)}</span>
+                      {download.created && (
+                        <span>{new Date(download.created).toLocaleString()}</span>
+                      )}
+                      {download.type && (
+                        <span className="px-2 py-1 bg-slate-700 rounded text-xs">
+                          {download.type}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => downloadFile(download.filename)}
+                    className="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm font-medium"
+                  >
+                    Download
+                  </button>
+                  <button
+                    onClick={() => deleteFile(download.filename)}
+                    className="px-3 py-2 bg-red-600 hover:bg-red-500 rounded text-sm font-medium"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+              
+              {download.description && (
+                <p className="mt-2 text-slate-300 text-sm">{download.description}</p>
+              )}
+            </div>
+          ))}
+          
+          {downloads.length === 0 && !loading && (
+            <div className="text-slate-500 text-center py-8">
+              No downloads available. Files generated by Dexter will appear here.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Download Summary */}
+      {downloads.length > 0 && (
+        <div className="mt-8 grid grid-cols-3 gap-4">
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-900/40 text-center">
+            <div className="text-2xl font-bold text-blue-400">
+              {downloads.length}
+            </div>
+            <div className="text-sm text-slate-400">Total Files</div>
+          </div>
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-900/40 text-center">
+            <div className="text-2xl font-bold text-green-400">
+              {formatFileSize(downloads.reduce((total, d) => total + (d.size || 0), 0))}
+            </div>
+            <div className="text-sm text-slate-400">Total Size</div>
+          </div>
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-900/40 text-center">
+            <div className="text-2xl font-bold text-purple-400">
+              {new Set(downloads.map(d => d.type)).size}
+            </div>
+            <div className="text-sm text-slate-400">File Types</div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

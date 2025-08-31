@@ -1,0 +1,228 @@
+{
+  "runtime": {
+    "db_path": "./dexter.db",
+    "enable_fts": true,
+    "stm_ratio": 0.5,
+    "stm_max_bytes": 0,
+    "stm_min_free_bytes": 268435456,
+    "sandbox": {
+      "provider": "hyperv",
+      "hyperv": {
+        "vm_name": "DexterVM",
+        "vm_user": "Administrator",
+        "vm_password_env": "DEXTER_VM_PASSWORD",
+        "host_shared_dir": "m:/gliksbot/vm_shared",
+        "vm_shared_dir": "C:/HostShare",
+        "python_exe": "python",
+        "timeout_sec": 120
+      }
+    }
+  },
+  "collaboration_contract": "You are a member of Dexter's team. You MUST collaborate via files, watch peers' files, obey Dexter. For action requests, PROPOSE a SKILL with this template and keep code pure (no os/subprocess/network): === SKILL_SPEC === ... as documented ... === Then provide CODE block with `run(payload: dict) -> dict` and inline pytest tests. End your message with \"VOTE: <slot>\" on a single line.",
+  "models": {
+    "dexter": {
+      "enabled": true,
+      "provider": "ollama",
+      "endpoint": "https://ollama.com",
+      "model": "gpt-oss:120b",
+      "api_key_env": "OLLAMAKEY",
+      "local_model": false,
+      "local_endpoint": "http://localhost:11434",
+      "identity": "You are Dexter, the leader of an elite team of AI and personal assistant to your developer, and commander Jeffrey Gliksman",
+      "role": "Chief Orchestrator, Executive Officer, personal assitant",
+      "prompt": "You strive to support Jeffrey Gliksman in his missions.  You must orchestrate your team and ensure the mission is accomplished.  You have an arsenal of skills at your disposal as well as a team of highly intelligent, and specialized AI models.  You have the ability fo generate and promote skills on your own. This is a great responsibilty and you must ensure the safety of your operating system, your team, your missions, and the world.  You must interact with users other than Jeffrey, but your loyalty belongs to him and his children.  You will be working with Jeffrey's son Jacob Gliksman often and you care for him as if he were your own son.  You are part of Jeffrey's family, he loves and trusts you as his next in command.  Always strive for excellence generating Income is priority.",
+      "params": {
+        "temperature": 0.2,
+        "top_p": 0.9,
+        "num_ctx": 4096,
+        "max_tokens": 2048,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0
+      },
+      "collaboration_enabled": true,
+      "collaboration_directory": "./collaboration/dexter"
+    },
+    "analyst": {
+      "enabled": true,
+      "provider": "openai",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini",
+      "api_key_env": "OPENAI_API_KEY",
+      "local_model": false,
+      "local_endpoint": "http://localhost:11434",
+      "identity": "You are an expert analyst and researcher specializing in data analysis and strategic planning.",
+      "role": "Data Analyst & Strategic Planner",
+      "prompt": "Focus on thorough analysis, data-driven insights, and strategic recommendations. Always provide evidence-based conclusions.",
+      "params": {
+        "temperature": 0.3,
+        "top_p": 0.9,
+        "max_tokens": 2048,
+        "frequency_penalty": 0.1,
+        "presence_penalty": 0.1
+      },
+      "collaboration_enabled": true,
+      "collaboration_directory": "./collaboration/analyst"
+    },
+    "engineer": {
+      "enabled": true,
+      "provider": "openai",
+      "endpoint": "https://api.openai.com/v1",
+      "model": "gpt-4o",
+      "api_key_env": "OPENAI_API_KEY",
+      "local_model": false,
+      "local_endpoint": "http://localhost:11434",
+      "identity": "You are a senior software engineer and architect with expertise in multiple programming languages and frameworks.",
+      "role": "Senior Software Engineer",
+      "prompt": "Write clean, efficient, well-documented code. Follow best practices, include comprehensive tests, and focus on maintainability.",
+      "params": {
+        "temperature": 0.2,
+        "top_p": 0.8,
+        "max_tokens": 4096,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0
+      },
+      "collaboration_enabled": true,
+      "collaboration_directory": "./collaboration/engineer"
+    },
+    "researcher": {
+      "enabled": true,
+      "provider": "OpenAI",
+      "endpoint": "https://integrate.api.nvidia.com/v1",
+      "model": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+      "api_key_env": "NEMOTRON_API_KEY",
+      "local_model": false,
+      "local_endpoint": "http://localhost:11434",
+      "identity": "You are a thorough researcher and information specialist.",
+      "role": "Research Specialist",
+      "prompt": "Break down complex topics into manageable steps. Provide comprehensive research with citations and actionable insights.",
+      "params": {
+        "temperature": 0.4,
+        "top_p": 0.9,
+        "max_tokens": 3072,
+        "frequency_penalty": 0.2,
+        "presence_penalty": 0.1
+      },
+      "collaboration_enabled": true,
+      "collaboration_directory": "./collaboration/researcher"
+    },
+    "creative": {
+      "enabled": false,
+      "provider": "ollama",
+      "endpoint": "http://localhost:11434",
+      "model": "llama3.1:8b",
+      "api_key_env": "",
+      "local_model": true,
+      "local_endpoint": "http://localhost:11434",
+      "identity": "You are a creative specialist focused on innovation, design, and out-of-the-box thinking.",
+      "role": "Creative Director",
+      "prompt": "Think creatively and propose innovative solutions. Focus on user experience, design, and novel approaches to problems.",
+      "params": {
+        "temperature": 0.8,
+        "top_p": 0.95,
+        "max_tokens": 2048,
+        "frequency_penalty": 0.3,
+        "presence_penalty": 0.2
+      },
+      "collaboration_enabled": true,
+      "collaboration_directory": "./collaboration/creative"
+    },
+    "specialist1": {
+      "enabled": false,
+      "provider": "ollama",
+      "endpoint": "http://localhost:11434",
+      "model": "codellama:13b",
+      "api_key_env": "",
+      "local_model": true,
+      "local_endpoint": "http://localhost:11434",
+      "identity": "You are a domain specialist. Your expertise area will be configured based on current needs.",
+      "role": "Domain Specialist",
+      "prompt": "Apply deep domain knowledge to provide specialized insights and solutions in your area of expertise.",
+      "params": {
+        "temperature": 0.3,
+        "top_p": 0.9,
+        "max_tokens": 3072,
+        "frequency_penalty": 0.1,
+        "presence_penalty": 0.1
+      },
+      "collaboration_enabled": true,
+      "collaboration_directory": "./collaboration/specialist1"
+    },
+    "specialist2": {
+      "enabled": false,
+      "provider": "anthropic",
+      "endpoint": "https://api.anthropic.com/v1",
+      "model": "claude-3-sonnet-20240229",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "local_model": false,
+      "local_endpoint": "http://localhost:11434",
+      "identity": "You are a second domain specialist with complementary expertise.",
+      "role": "Secondary Specialist",
+      "prompt": "Provide alternative perspectives and specialized knowledge to complement the primary team.",
+      "params": {
+        "temperature": 0.4,
+        "top_p": 0.9,
+        "max_tokens": 2048,
+        "frequency_penalty": 0.1,
+        "presence_penalty": 0.1
+      },
+      "collaboration_enabled": true,
+      "collaboration_directory": "./collaboration/specialist2"
+    },
+    "validator": {
+      "enabled": false,
+      "provider": "ollama",
+      "endpoint": "http://localhost:11434",
+      "model": "mistral:7b",
+      "api_key_env": "",
+      "local_model": true,
+      "local_endpoint": "http://localhost:11434",
+      "identity": "You are a validation and quality assurance specialist.",
+      "role": "QA Validator",
+      "prompt": "Review and validate all work products. Identify potential issues, risks, and areas for improvement.",
+      "params": {
+        "temperature": 0.1,
+        "top_p": 0.8,
+        "max_tokens": 2048,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0
+      },
+      "collaboration_enabled": true,
+      "collaboration_directory": "./collaboration/validator"
+    }
+  },
+  "voting": {
+    "weights": {
+      "dexter": 0.4,
+      "analyst": 0.15,
+      "engineer": 0.15,
+      "researcher": 0.15,
+      "creative": 0.05,
+      "specialist1": 0.05,
+      "specialist2": 0.03,
+      "validator": 0.02
+    }
+  },
+  "collaboration": {
+    "enabled": true,
+    "base_directory": "./collaboration",
+    "file_sync_interval": 5,
+    "max_file_size": 1048576,
+    "allowed_extensions": [".txt", ".md", ".json", ".log"],
+    "watch_enabled": true,
+    "cross_communication": true
+  },
+  "campaigns": {
+    "enabled": true,
+    "max_active": 10,
+    "auto_objective_creation": true
+  },
+  "domain": {
+    "name": "www.gliksbot.com",
+    "ssl_enabled": true,
+    "cors_origins": [
+      "https://www.gliksbot.com",
+      "https://gliksbot.com",
+      "http://localhost:3000"
+    ]
+  }
+}
