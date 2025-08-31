@@ -80,14 +80,5 @@
       "https://gliksbot.com",
       "http://localhost:3000"
     ]
-  },
-  "ldap": {
-    "enabled": true,
-    "url": "ldap://gliksbot.com",
-    "base_dn": "DC=gliksbot,DC=com",
-    "domain": "gliksbot.com",
-    "bind_dn_env": "DEXTER_LDAP_BIND_DN",
-    "bind_password_env": "DEXTER_LDAP_BIND_PASSWORD",
-    "allowed_group": "CN=Dexter Users,OU=Groups,DC=gliksbot,DC=com"
   }
 }
