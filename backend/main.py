@@ -360,9 +360,25 @@ async def update_model_config(slot_id: str, payload: dict):
 
 # Helper functions
 async def _get_dexter_response(user_input: str) -> str:
-    """Get Dexter's immediate response"""
-    # Placeholder - implement actual Dexter LLM call
-    return f"I'm working on: {user_input}. My team is collaborating in the background to find the best solution."
+    """Get Dexter's immediate response using configured LLM"""
+    try:
+        from dexter_brain.llm import call_slot
+        
+        # Call Dexter's LLM with the user input
+        response = await call_slot(_app_cfg, 'dexter', user_input)
+        return response
+        
+    except Exception as e:
+        # Fallback if Dexter's LLM fails
+        error_msg = str(e)
+        if "not found in configuration" in error_msg:
+            return "I'm not properly configured yet. Please check my configuration in the Models tab."
+        elif "not enabled" in error_msg:
+            return "I'm currently disabled. Please enable me in the Models tab to chat."
+        elif "API key" in error_msg:
+            return "My API key is missing or invalid. Please configure my API key in the Models tab."
+        else:
+            return f"I'm experiencing technical difficulties: {error_msg}. Please check my configuration."
 
 def _intent_implies_skill_creation(text: str) -> bool:
     """Check if user input implies need for new skill"""
