@@ -15,8 +15,8 @@ from dexter_brain.config import Config
 from dexter_brain.campaigns import CampaignManager
 from dexter_brain.collaboration import CollaborationManager
 
-CONFIG_PATH = os.environ.get("DEXTER_CONFIG_FILE", "m:/gliksbot/config.json")
-DOWNLOADS_DIR = os.environ.get("DEXTER_DOWNLOADS_DIR", "m:/gliksbot/vm_shared")
+CONFIG_PATH = os.environ.get("DEXTER_CONFIG_FILE", "/workspaces/gliksbot/config.json")
+DOWNLOADS_DIR = os.environ.get("DEXTER_DOWNLOADS_DIR", "/tmp/dexter_downloads")
 
 # Load config
 _app_cfg: Config = Config.load(CONFIG_PATH)
@@ -246,6 +246,117 @@ async def get_collaboration_status(session_id: str):
         "vote_counts": vote_counts,
         "winning_solution": winning_solution
     }
+
+@app.get("/collaboration/status")
+async def get_collaboration_overview():
+    """Get overview of all LLM slots and their current status"""
+    models = _app_cfg.models
+    
+    # Get active collaboration sessions
+    active_sessions = _collab_mgr.get_active_sessions() if hasattr(_collab_mgr, 'get_active_sessions') else []
+    
+    slots = {}
+    
+    # Add Dexter status (always slot 0 / main)
+    dexter_config = models.get('dexter', {})
+    
+    # Add other numbered slots
+    for i in range(1, 6):  # Slots 1-5
+        slot_key = f"slot_{i}"
+        slot_config = models.get(slot_key) or models.get(f"llm_{i}")
+        
+        if slot_config:
+            error = None
+            if not slot_config.get('enabled'):
+                error = "Slot disabled"
+            elif not slot_config.get('api_key'):
+                error = "Missing API key"
+            elif not slot_config.get('provider'):
+                error = "Missing provider"
+            elif not slot_config.get('model'):
+                error = "Missing model name"
+            
+            # Check if this slot is currently active in any collaboration
+            active = any(slot_key in session.get('participants', []) for session in active_sessions)
+            current_task = None
+            output = None
+            
+            if active:
+                # Get the most recent output for this slot
+                for session in active_sessions:
+                    if slot_key in session.get('participants', []):
+                        current_task = session.get('original_request', 'Working on collaboration...')
+                        # Get latest output from this slot
+                        slot_results = session.get('results', {}).get(slot_key, {})
+                        if slot_results:
+                            output = slot_results.get('latest_output', slot_results.get('proposal', ''))
+                        break
+            
+            slots[slot_key] = {
+                'name': slot_config.get('identity', f'LLM {i}'),
+                'error': error,
+                'active': active,
+                'currentTask': current_task,
+                'output': output,
+                'provider': slot_config.get('provider'),
+                'model': slot_config.get('model'),
+                'enabled': slot_config.get('enabled', False)
+            }
+        # If no config, slot will be None and handled by frontend as "not configured"
+    
+    return {
+        'active': len(active_sessions) > 0,
+        'sessions': len(active_sessions),
+        'slots': slots
+    }
+
+@app.post("/models/{slot_id}/config")
+async def update_model_config(slot_id: str, payload: dict):
+    """Update a specific parameter for a model slot"""
+    parameter = payload.get('parameter')
+    value = payload.get('value')
+    
+    if not parameter:
+        raise HTTPException(400, "Parameter name required")
+    
+    # Load current config
+    try:
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+    except Exception as e:
+        raise HTTPException(500, f"Failed to load config: {str(e)}")
+    
+    # Ensure models section exists
+    if 'models' not in config_data:
+        config_data['models'] = {}
+    
+    # Ensure slot exists
+    if slot_id not in config_data['models']:
+        config_data['models'][slot_id] = {}
+    
+    slot_config = config_data['models'][slot_id]
+    
+    # Update the parameter
+    if parameter == 'temperature':
+        if 'params' not in slot_config:
+            slot_config['params'] = {}
+        slot_config['params']['temperature'] = value
+    else:
+        slot_config[parameter] = value
+    
+    # Save config
+    try:
+        with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+            json.dump(config_data, f, indent=2)
+    except Exception as e:
+        raise HTTPException(500, f"Failed to save config: {str(e)}")
+    
+    # Reload app config
+    global _app_cfg, _collab_mgr
+    _app_cfg = Config.load(CONFIG_PATH)
+    _collab_mgr = CollaborationManager(_app_cfg)
+    
+    return {"ok": True, "message": f"Updated {parameter} for {slot_id}"}
 
 # Helper functions
 async def _get_dexter_response(user_input: str) -> str:
