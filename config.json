@@ -25,7 +25,7 @@
       "provider": "ollama",
       "endpoint": "http://localhost:11434",
       "model": "llama3.1:8b-instruct-q4_0",
-      "identity": "You are Dexter, the orchestrator. You design SkillSpecs, enforce tests‑first, promote safe skills, and execute them.",
+      "identity": "You are Dexter, the orchestrator. You design SkillSpecs, enforce tests\u2011first, promote safe skills, and execute them.",
       "role": "Chief Orchestrator",
       "prompt": "Keep outputs concise for UI; when building a skill, follow the exact template.",
       "params": {
@@ -34,19 +34,19 @@
         "num_ctx": 4096
       }
     },
-    "openai": {
-      "enabled": false,
+    "slot_1": {
+      "enabled": true,
       "provider": "openai",
       "model": "gpt-4o-mini",
       "api_key_env": "OPENAI_API_KEY",
       "identity": "You are an analyst and coder.",
       "role": "Engineer",
-      "prompt": "Prefer tests‑first.",
+      "prompt": "Prefer tests\u2011first.",
       "params": {
         "temperature": 0.5
       }
     },
-    "nemotron": {
+    "slot_2": {
       "enabled": false,
       "provider": "nemotron",
       "endpoint": "https://api.nemotron.ai",
@@ -58,6 +58,33 @@
       "params": {
         "temperature": 0.6
       }
+    },
+    "slot_3": {
+      "enabled": false,
+      "provider": "",
+      "model": "",
+      "identity": "",
+      "role": "",
+      "prompt": "",
+      "params": {}
+    },
+    "slot_4": {
+      "enabled": false,
+      "provider": "",
+      "model": "",
+      "identity": "",
+      "role": "",
+      "prompt": "",
+      "params": {}
+    },
+    "slot_5": {
+      "enabled": false,
+      "provider": "",
+      "model": "",
+      "identity": "",
+      "role": "",
+      "prompt": "",
+      "params": {}
     }
   },
   "voting": {

@@ -229,24 +229,6 @@ async def chat(payload: ChatIn):
         collaboration_session=session_id
     )
 
-@app.get("/collaboration/{session_id}")
-async def get_collaboration_status(session_id: str):
-    """Get status of LLM collaboration session"""
-    results = _collab_mgr.get_collaboration_results(session_id)
-    vote_counts = _collab_mgr.count_votes(session_id)
-    winning_solution = _collab_mgr.get_winning_solution(session_id)
-    
-    return {
-        "session_id": session_id,
-        "status": results.get("status", "unknown"),
-        "llms_participating": results.get("llms", []),
-        "proposals_count": len(results.get("proposals", {})),
-        "refinements_count": len(results.get("refinements", {})),
-        "votes_count": len(results.get("votes", {})),
-        "vote_counts": vote_counts,
-        "winning_solution": winning_solution
-    }
-
 @app.get("/collaboration/status")
 async def get_collaboration_overview():
     """Get overview of all LLM slots and their current status"""
@@ -309,6 +291,83 @@ async def get_collaboration_overview():
         'sessions': len(active_sessions),
         'slots': slots
     }
+
+@app.get("/collaboration/{session_id}")
+async def get_collaboration_status(session_id: str):
+    """Get status of LLM collaboration session"""
+    results = _collab_mgr.get_collaboration_results(session_id)
+    vote_counts = _collab_mgr.count_votes(session_id)
+    winning_solution = _collab_mgr.get_winning_solution(session_id)
+    
+    return {
+        "session_id": session_id,
+        "status": results.get("status", "unknown"),
+        "llms_participating": results.get("llms", []),
+        "proposals_count": len(results.get("proposals", {})),
+        "refinements_count": len(results.get("refinements", {})),
+        "votes_count": len(results.get("votes", {})),
+        "vote_counts": vote_counts,
+        "winning_solution": winning_solution
+    }
+
+@app.get("/models")
+async def get_models():
+    """Get all model configurations in slot format"""
+    models = _app_cfg.models
+    
+    # Transform into the format expected by frontend
+    models_list = []
+    
+    # Add Dexter first
+    if 'dexter' in models:
+        dexter_config = models['dexter']
+        models_list.append({
+            'name': 'dexter',
+            'provider': dexter_config.get('provider', ''),
+            'model': dexter_config.get('model', ''),
+            'api_key': dexter_config.get('api_key', ''),
+            'endpoint': dexter_config.get('endpoint', ''),
+            'identity': dexter_config.get('identity', ''),
+            'role': dexter_config.get('role', ''),
+            'prompt': dexter_config.get('prompt', ''),
+            'enabled': dexter_config.get('enabled', False),
+            'params': dexter_config.get('params', {})
+        })
+    
+    # Add other slots (1-5)
+    for i in range(1, 6):
+        slot_key = f"slot_{i}"
+        slot_config = models.get(slot_key)
+        
+        if slot_config:
+            models_list.append({
+                'name': slot_key,
+                'provider': slot_config.get('provider', ''),
+                'model': slot_config.get('model', ''),
+                'api_key': slot_config.get('api_key', ''),
+                'endpoint': slot_config.get('endpoint', ''),
+                'identity': slot_config.get('identity', ''),
+                'role': slot_config.get('role', ''),
+                'prompt': slot_config.get('prompt', ''),
+                'enabled': slot_config.get('enabled', False),
+                'params': slot_config.get('params', {})
+            })
+        else:
+            # Add empty slot placeholder
+            models_list.append({
+                'name': slot_key,
+                'provider': '',
+                'model': '',
+                'api_key': '',
+                'endpoint': '',
+                'identity': '',
+                'role': '',
+                'prompt': '',
+                'enabled': False,
+                'params': {}
+            })
+    
+    return {'models': models_list}
 
 @app.post("/models/{slot_id}/config")
 async def update_model_config(slot_id: str, payload: dict):
