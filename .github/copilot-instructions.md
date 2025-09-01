@@ -18,14 +18,14 @@ Dexter v3 is an autonomous AI system with multi-LLM collaboration, campaign mana
    cd frontend
    npm install
    ```
-   - Takes 10-30 seconds. NEVER CANCEL.
+   - Takes 8-10 seconds. NEVER CANCEL.
    - If firewall issues occur, document them as "npm install may fail due to firewall restrictions"
 
 2. **Frontend Build**:
    ```bash
    npm run build
    ```
-   - Takes 30-90 seconds. NEVER CANCEL. Set timeout to 3+ minutes.
+   - Takes 1-2 seconds. NEVER CANCEL. Set timeout to 3+ minutes.
    - Output goes to `frontend/dist/` directory
    - Always run this before deploying or testing production builds
 
@@ -34,8 +34,7 @@ Dexter v3 is an autonomous AI system with multi-LLM collaboration, campaign mana
    cd backend
    pip install -r requirements.txt
    ```
-   - Takes 1-5 minutes depending on network. NEVER CANCEL. Set timeout to 10+ minutes.
-   - Note: `python-ldap3` package name is incorrect in requirements.txt, use `ldap3` instead
+   - Takes 10-15 seconds depending on network. NEVER CANCEL. Set timeout to 10+ minutes.
    - Critical packages: fastapi, uvicorn, pydantic, httpx, python-multipart, aiosqlite, pyjwt, ldap3, cryptography, psutil
 
 ### Running the Applications
@@ -46,23 +45,32 @@ Dexter v3 is an autonomous AI system with multi-LLM collaboration, campaign mana
    npm run dev
    ```
    - Starts on http://localhost:3000
-   - Takes 5-10 seconds to start. NEVER CANCEL.
+   - Takes <1 second to start. NEVER CANCEL.
    - Use Ctrl+C to stop
 
-2. **Backend Development Server**:
+2. **Frontend Preview Server**:
+   ```bash
+   cd frontend
+   npm run preview
+   ```
+   - Starts on http://localhost:4173
+   - Serves production build for testing
+   - Requires `npm run build` to be run first
+
+3. **Backend Development Server**:
    ```bash
    cd backend
-   python3 main.py
+   DEXTER_CONFIG_FILE="/path/to/config.json" DEXTER_DOWNLOADS_DIR="/tmp/dexter_downloads" python3 main.py
    ```
-   - Starts on http://localhost:8000 (default FastAPI port)
+   - Starts on http://localhost:8080 (default FastAPI port)
    - Requires config.json in project root
-   - Environment variables from .env.template may be needed
+   - Environment variables must be set for proper operation
 
-3. **Demo System** (No dependencies required):
+4. **Demo System** (No dependencies required):
    ```bash
    python3 demo_system.py
    ```
-   - Takes 3-10 seconds to complete. NEVER CANCEL.
+   - Takes 2-3 seconds to complete. NEVER CANCEL.
    - Shows LLM collaboration simulation
    - Use this to understand system functionality without full setup
 
@@ -90,22 +98,25 @@ After making changes, ALWAYS validate these scenarios:
    - Access http://localhost:3000
    - Verify page loads without console errors
    - Test at least one tab/component loads
+   - Confirm chat interface and LLM collaboration slots are visible
 
 3. **Demo System Validation**:
    - Run `python3 demo_system.py`
    - Verify output shows collaboration simulation
    - Check all phases complete successfully
+   - Confirm "Dexter v3 represents the future of autonomous AI collaboration!" message appears
 
 4. **Backend API Validation** (if dependencies available):
-   - Start backend server with `python3 main.py`
-   - Access http://localhost:8000/docs (FastAPI docs)
-   - Test `/health` endpoint returns OK
+   - Start backend server with proper environment variables
+   - Access http://localhost:8080/docs (FastAPI docs)
+   - Test `/health` endpoint returns `{"ok":true,"version":"3.0"}`
 
 ### Testing Commands
 - No automated test suite currently exists
 - Use demo system for functional validation
 - Frontend linting: Not configured (no lint script in package.json)
 - Backend linting: Not configured (no pytest configuration found)
+- pytest is available for backend testing if test files are created
 
 ## Configuration and Important Files
 
@@ -138,6 +149,8 @@ Essential for production deployment:
 - `OPENAI_API_KEY` - OpenAI API key (optional)
 - `NEMOTRON_API_KEY` - Nemotron API key (optional)
 - `DEXTER_JWT_SECRET` - JWT signing key (production)
+- `DEXTER_CONFIG_FILE` - Path to config.json file
+- `DEXTER_DOWNLOADS_DIR` - Directory for temporary downloads
 
 ## Common Tasks
 
@@ -150,26 +163,27 @@ cd frontend && npm install && npm run dev
 cd frontend && npm run build
 
 # Backend development (requires dependencies)
-cd backend && python3 main.py
+cd backend && DEXTER_CONFIG_FILE="../config.json" DEXTER_DOWNLOADS_DIR="/tmp/dexter_downloads" python3 main.py
 
 # Quick functionality test
 python3 demo_system.py
 ```
 
 ### Build Time Expectations
-- **npm install**: 10-30 seconds (tested: ~8 seconds)
-- **npm run build**: 30-90 seconds (tested: ~1.4 seconds)
-- **npm run dev**: Starts in <1 second (tested: ~207ms)
-- **pip install**: 1-5 minutes (network dependent)
+- **npm install**: 8-10 seconds (tested: 8.4 seconds)
+- **npm run build**: 1-2 seconds (tested: 1.6 seconds)
+- **npm run dev**: Starts in <1 second (tested: 188ms)
+- **pip install**: 10-15 seconds (tested: 12.3 seconds)
 - **production_setup.ps1**: 10-30 minutes (Windows only)
-- **Demo system**: 3-10 seconds (tested: ~2 seconds)
+- **Demo system**: 2-3 seconds (tested: 2.2 seconds)
 
 ### Troubleshooting Common Issues
 1. **npm install fails**: May be firewall/network restrictions - document this limitation
 2. **Backend import errors**: Verify Python dependencies installed correctly
 3. **Config.json missing**: Copy from repository root, check paths are correct
-4. **VM integration fails**: Requires Windows with Hyper-V and VM named "DexterVM"
-5. **LDAP auth fails**: Requires domain controller and proper AD configuration
+4. **Backend startup fails**: Ensure environment variables `DEXTER_CONFIG_FILE` and `DEXTER_DOWNLOADS_DIR` are set
+5. **VM integration fails**: Requires Windows with Hyper-V and VM named "DexterVM"
+6. **LDAP auth fails**: Requires domain controller and proper AD configuration
 
 ## LLM Provider Integration
 
@@ -209,5 +223,49 @@ When making changes:
 3. **Validate development servers** start correctly
 4. **Check configuration files** for syntax errors
 5. **Document any new environment requirements**
+
+### Validation Workflow
+After any code changes, run this complete validation sequence:
+```bash
+# 1. Test demo system
+python3 demo_system.py
+
+# 2. Test frontend build
+cd frontend && npm run build
+
+# 3. Test frontend dev server
+npm run dev &
+# Access http://localhost:3000 in browser
+# Ctrl+C to stop
+
+# 4. Test backend (if dependencies available)
+cd ../backend
+DEXTER_CONFIG_FILE="../config.json" DEXTER_DOWNLOADS_DIR="/tmp/dexter_downloads" python3 main.py &
+# Test http://localhost:8080/health
+# Ctrl+C to stop
+```
+
+## System Architecture Overview
+
+### Frontend (`frontend/`)
+- **React + Vite** with Tailwind CSS
+- **Campaign Dashboard** for tracking objectives and skills
+- **Real-time Chat** with team collaboration
+- **Live Logs** and collaboration file monitoring
+- **Config Editor** for runtime system adjustments
+
+### Backend (`backend/`)
+- **FastAPI** REST API with async support
+- **Config-driven** with JSON configuration
+- **Campaign Management** for long-term autonomous operation  
+- **LLM Orchestration** with immediate broadcast and collaboration
+- **VM Sandbox** using Hyper-V PowerShell Direct
+- **Memory & Patterns** for learning and context
+
+### VM Integration (`vm_shared/`)
+- **Hyper-V VM** with no network access for security
+- **PowerShell Direct** for command execution
+- **Shared folder** for code transfer and results
+- **Automatic testing** before skill promotion
 
 The system is designed for enterprise deployment but can run in development mode with mock LLM providers and local authentication.
