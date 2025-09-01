@@ -4,7 +4,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, asdict
-from .db import BrainDB
+from backend.dexter_brain.db import BrainDB
 
 @dataclass
 class Objective:

@@ -8,7 +8,7 @@
     "sandbox": {
       "provider": "hyperv",
       "hyperv": {
-        "vm_name": "DexterVM",
+        "vm_name": "sandbox",
         "vm_user": "Administrator",
         "vm_password_env": "DEXTER_VM_PASSWORD",
         "host_shared_dir": "m:/gliksbot/vm_shared",
@@ -23,22 +23,17 @@
     "dexter": {
       "enabled": true,
       "provider": "ollama",
-      "endpoint": "https://ollama.com",
-      "model": "gpt-oss:120b",
-      "api_key_env": "OLLAMAKEY",
+      "model": "",
+      "endpoint": "http://localhost:11434",
+      "api_key_env": "",
+      "temperature": 0.7,
+      "max_tokens": 2048,
       "local_model": false,
+      "identity": "",
+      "role": "",
+      "prompt": "",
+      "params": {},
       "local_endpoint": "http://localhost:11434",
-      "identity": "You are Dexter, the leader of an elite team of AI and personal assistant to your developer, and commander Jeffrey Gliksman",
-      "role": "Chief Orchestrator, Executive Officer, personal assitant",
-      "prompt": "You strive to support Jeffrey Gliksman in his missions.  You must orchestrate your team and ensure the mission is accomplished.  You have an arsenal of skills at your disposal as well as a team of highly intelligent, and specialized AI models.  You have the ability fo generate and promote skills on your own. This is a great responsibilty and you must ensure the safety of your operating system, your team, your missions, and the world.  You must interact with users other than Jeffrey, but your loyalty belongs to him and his children.  You will be working with Jeffrey's son Jacob Gliksman often and you care for him as if he were your own son.  You are part of Jeffrey's family, he loves and trusts you as his next in command.  Always strive for excellence generating Income is priority.",
-      "params": {
-        "temperature": 0.2,
-        "top_p": 0.9,
-        "num_ctx": 4096,
-        "max_tokens": 2048,
-        "frequency_penalty": 0.0,
-        "presence_penalty": 0.0
-      },
       "collaboration_enabled": true,
       "collaboration_directory": "./collaboration/dexter"
     },
@@ -86,7 +81,7 @@
     },
     "researcher": {
       "enabled": true,
-      "provider": "OpenAI",
+      "provider": "openai",
       "endpoint": "https://integrate.api.nvidia.com/v1",
       "model": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
       "api_key_env": "NEMOTRON_API_KEY",
@@ -108,31 +103,17 @@
     "creative": {
       "enabled": false,
       "provider": "ollama",
-      "endpoint": "http://localhost:11434",
-      "model": "llama3.1:8b",
-      "api_key_env": "",
-      "local_model": true,
-      "local_endpoint": "http://localhost:11434",
-      "identity": "You are a creative specialist focused on innovation, design, and out-of-the-box thinking.",
-      "role": "Creative Director",
-      "prompt": "Think creatively and propose innovative solutions. Focus on user experience, design, and novel approaches to problems.",
-      "params": {
-        "temperature": 0.8,
-        "top_p": 0.95,
-        "max_tokens": 2048,
-        "frequency_penalty": 0.3,
-        "presence_penalty": 0.2
-      },
-      "collaboration_enabled": true,
-      "collaboration_directory": "./collaboration/creative"
+      "model": "test-model",
+      "role": "Test Role",
+      "identity": "Test identity"
     },
     "specialist1": {
-      "enabled": false,
-      "provider": "ollama",
-      "endpoint": "http://localhost:11434",
-      "model": "codellama:13b",
-      "api_key_env": "",
-      "local_model": true,
+      "enabled": true,
+      "provider": "vultr",
+      "endpoint": "https://api.vultrinference.com/v1",
+      "model": "llama-3.3-70b-instruct-fp8",
+      "api_key_env": "V4MLLTDNI2GZHVHZ6PJQD3JTYMRLB6MQN37A",
+      "local_model": false,
       "local_endpoint": "http://localhost:11434",
       "identity": "You are a domain specialist. Your expertise area will be configured based on current needs.",
       "role": "Domain Specialist",
@@ -188,18 +169,40 @@
       },
       "collaboration_enabled": true,
       "collaboration_directory": "./collaboration/validator"
+    },
+    "rye": {
+      "enabled": false,
+      "provider": "ollama",
+      "endpoint": "http://localhost:11434",
+      "model": "llama3.3:latest",
+      "api_key_env": "",
+      "local_model": true,
+      "local_endpoint": "http://localhost:11434",
+      "identity": "You are Rye, a versatile AI assistant that adapts to any role needed.",
+      "role": "Adaptive Assistant",
+      "prompt": "You are flexible and can take on whatever role is most helpful for the current task.",
+      "params": {
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_tokens": 2048,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0
+      },
+      "collaboration_enabled": true,
+      "collaboration_directory": "./collaboration/rye"
     }
   },
   "voting": {
     "weights": {
-      "dexter": 0.4,
+      "dexter": 0.35,
       "analyst": 0.15,
       "engineer": 0.15,
       "researcher": 0.15,
       "creative": 0.05,
       "specialist1": 0.05,
       "specialist2": 0.03,
-      "validator": 0.02
+      "validator": 0.02,
+      "rye": 0.05
     }
   },
   "collaboration": {
@@ -207,7 +210,12 @@
     "base_directory": "./collaboration",
     "file_sync_interval": 5,
     "max_file_size": 1048576,
-    "allowed_extensions": [".txt", ".md", ".json", ".log"],
+    "allowed_extensions": [
+      ".txt",
+      ".md",
+      ".json",
+      ".log"
+    ],
     "watch_enabled": true,
     "cross_communication": true
   },
@@ -215,6 +223,35 @@
     "enabled": true,
     "max_active": 10,
     "auto_objective_creation": true
+  },
+  "tts": {
+    "enabled": true,
+    "global_settings": {
+      "rate": 1.0,
+      "pitch": 1.0,
+      "volume": 0.8,
+      "voice": null
+    },
+    "per_model_settings": {
+      "dexter": {
+        "enabled": true,
+        "rate": 1.0,
+        "pitch": 1.0,
+        "volume": 0.8
+      },
+      "analyst": {
+        "enabled": true,
+        "rate": 1.1,
+        "pitch": 0.9,
+        "volume": 0.7
+      },
+      "engineer": {
+        "enabled": true,
+        "rate": 0.9,
+        "pitch": 1.1,
+        "volume": 0.8
+      }
+    }
   },
   "domain": {
     "name": "www.gliksbot.com",

@@ -1,0 +1,6 @@
+Timestamp: 1756682800.947312
+LLM: analyst
+Phase: vote
+Session: f1621ec2-3f8f-4c5e-8f8a-b488dc3c2d42
+==================================================
+VOTE: <llm_name>

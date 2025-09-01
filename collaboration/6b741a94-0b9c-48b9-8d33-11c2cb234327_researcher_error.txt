@@ -1,0 +1,6 @@
+Timestamp: 1756693277.0604775
+LLM: researcher
+Phase: error
+Session: 6b741a94-0b9c-48b9-8d33-11c2cb234327
+==================================================
+Unknown provider 'OpenAI' for LLM 'researcher'

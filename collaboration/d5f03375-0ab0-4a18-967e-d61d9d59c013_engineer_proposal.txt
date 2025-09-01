@@ -1,0 +1,38 @@
+Timestamp: 1756693339.4970765
+LLM: engineer
+Phase: proposal
+Session: d5f03375-0ab0-4a18-967e-d61d9d59c013
+==================================================
+**Analysis:**
+
+The user is asking for a question that only they would know the answer to. This implies a need for personalization and privacy, as the question should be unique and specific to the user's personal experiences, preferences, or knowledge. The challenge here is that as an AI, I do not have access to personal data or past interactions with the user, which makes it difficult to generate a truly personalized question.
+
+**Approach:**
+
+To address this request, we can guide the user through a process of self-reflection to generate a question themselves. This involves prompting the user to think about unique experiences, preferences, or knowledge areas that are specific to them. By doing so, the user can create a question that is personal and meaningful.
+
+1. **Prompt for Reflection:** Encourage the user to think about specific areas of their life or interests that are unique to them. This could include memorable experiences, personal achievements, favorite hobbies, or unique skills.
+
+2. **Guide Question Formation:** Provide a framework or examples to help the user formulate a question. This could involve suggesting categories or types of questions, such as "What was the most memorable moment in your last vacation?" or "What is a skill you have that few people know about?"
+
+3. **Encourage Personalization:** Remind the user that the question should be something only they would know, ensuring it is specific and personal.
+
+**Implementation:**
+
+Here is a step-by-step guide to help the user create their own personalized question:
+
+1. **Reflect on Unique Experiences:**
+   - Think about a recent event or experience that was significant to you. What made it memorable?
+
+2. **Consider Personal Interests:**
+   - What is a hobby or interest that you are passionate about? Is there a specific aspect of it that you excel in?
+
+3. **Identify Personal Achievements:**
+   - Reflect on a personal achievement that you are proud of. What was the journey like to achieve it?
+
+4. **Formulate the Question:**
+   - Using the reflections above, create a question. For example:
+     - "What was the most challenging part of my last project at work?"
+     - "What is my favorite book and why does it resonate with me?"
+
+By following this guide, the user can generate a question that is truly unique to them, fulfilling the request for a personalized question.

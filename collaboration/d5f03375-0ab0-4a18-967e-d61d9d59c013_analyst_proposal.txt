@@ -1,0 +1,51 @@
+Timestamp: 1756693342.412343
+LLM: analyst
+Phase: proposal
+Session: d5f03375-0ab0-4a18-967e-d61d9d59c013
+==================================================
+### Analysis
+The user is seeking a personalized question that only they would know the answer to. This implies a need for a question that is specific to their personal experiences, preferences, or knowledge. The challenge lies in formulating a question that is both meaningful and unique to the individual, ensuring that it cannot be easily guessed or answered by others.
+
+### Approach
+1. **Identify Personal Context**: Gather information about the user’s interests, experiences, and significant life events. This can include hobbies, favorite places, memorable events, or unique experiences.
+2. **Formulate Questions**: Based on the identified context, create a set of questions that require specific knowledge or experiences that are unlikely to be known by others.
+3. **Iterate for Uniqueness**: Ensure that the questions are not only personal but also varied enough to provide options for the user to choose from.
+
+### Implementation
+To implement this approach, we can create a simple framework that prompts the user for information about their personal experiences and then generates a tailored question. Here’s a SKILL_SPEC that outlines the necessary skill and a code snippet to facilitate this process.
+
+#### SKILL_SPEC
+- **Skill Name**: Personal Question Generator
+- **Description**: A skill that generates personalized questions based on user-provided information about their life experiences and preferences.
+
+#### Code Snippet
+```python
+def generate_personal_question(user_info):
+    questions = []
+    
+    # Example user_info could be a dictionary with keys like 'hobbies', 'memorable_events', 'favorite_places'
+    if 'hobbies' in user_info:
+        questions.append(f"What was the first hobby you ever pursued and why did you choose it?")
+    
+    if 'memorable_events' in user_info:
+        questions.append(f"Can you describe a memorable event from your childhood that shaped who you are today?")
+    
+    if 'favorite_places' in user_info:
+        questions.append(f"What is a place you visited that holds a special meaning to you, and what happened there?")
+    
+    # Return a random question from the generated list
+    import random
+    return random.choice(questions)
+
+# Example usage
+user_info = {
+    'hobbies': ['painting', 'hiking'],
+    'memorable_events': ['first school play', 'family road trip'],
+    'favorite_places': ['Grand Canyon', 'local park']
+}
+
+personal_question = generate_personal_question(user_info)
+print(personal_question)
+```
+
+This code defines a function that takes user information and generates a personalized question based on their unique experiences. The user can provide their information in a structured format, and the function will output a question that is tailored to them.

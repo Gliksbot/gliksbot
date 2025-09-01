@@ -1,0 +1,7 @@
+{
+  "timestamp": 1756723843.7656143,
+  "llm": "researcher",
+  "phase": "error",
+  "session": "057184b4-3cd6-4907-b5b9-4c577bdb1161",
+  "content": "Client error '401 Unauthorized' for url 'https://api.openai.com/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401"
+}

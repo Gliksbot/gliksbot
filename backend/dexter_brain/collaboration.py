@@ -5,14 +5,17 @@ import os
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Callable
-from .llm import call_slot
+from backend.dexter_brain.llm import call_slot
+from backend.dexter_brain.events import emit
 
 class CollaborationManager:
-    def __init__(self, config, collaboration_folder: str = "m:/gliksbot/collaboration"):
+    def __init__(self, config, collaboration_folder: str | None = None):
         self.config = config
-        self.collaboration_folder = collaboration_folder
+        # Use config.collaboration.base_directory by default
+        base_dir = getattr(self.config, 'collaboration', {}).get('base_directory', './collaboration')
+        self.collaboration_folder = collaboration_folder or base_dir
         self.active_sessions: Dict[str, Dict] = {}
-        os.makedirs(collaboration_folder, exist_ok=True)
+        os.makedirs(self.collaboration_folder, exist_ok=True)
         
         # Ensure all model collaboration directories exist
         self.ensure_collaboration_directories()
@@ -39,9 +42,25 @@ class CollaborationManager:
         }
         self.active_sessions[session_id] = session
         
+        # Emit collaboration start event
+        await emit({
+            "slot": "system", 
+            "event": "collaboration.started", 
+            "text": f"Started collaboration with {len(enabled_llms)} LLMs: {', '.join(enabled_llms)}",
+            "session_id": session_id,
+            "llms": enabled_llms
+        })
+        
         # Start all LLMs working in parallel
         tasks = []
         for llm_name in enabled_llms:
+            # Emit LLM start event
+            await emit({
+                "slot": llm_name,
+                "event": "llm.started", 
+                "text": f"Starting work on: {user_input[:50]}...",
+                "session_id": session_id
+            })
             task = asyncio.create_task(self._llm_collaboration_worker(session_id, llm_name, user_input))
             tasks.append(task)
         
@@ -52,24 +71,72 @@ class CollaborationManager:
         """Background worker for individual LLM collaboration"""
         try:
             # Phase 1: Initial proposal
+            await emit({
+                "slot": llm_name,
+                "event": "phase.proposal", 
+                "text": "Creating initial proposal...",
+                "session_id": session_id
+            })
+            
             proposal = await self._get_llm_proposal(llm_name, user_input, session_id)
             await self._write_collaboration_file(session_id, llm_name, "proposal", proposal)
+            
+            await emit({
+                "slot": llm_name,
+                "event": "proposal.completed", 
+                "text": f"Proposal complete: {proposal[:60]}...",
+                "session_id": session_id
+            })
             
             # Phase 2: Read peers and refine
             await asyncio.sleep(2)  # Give others time to write proposals
             peer_proposals = await self._read_peer_proposals(session_id, llm_name)
             
             if peer_proposals:
+                await emit({
+                    "slot": llm_name,
+                    "event": "phase.refinement", 
+                    "text": f"Reading {len(peer_proposals)} peer proposals, refining...",
+                    "session_id": session_id
+                })
+                
                 refinement = await self._get_llm_refinement(llm_name, user_input, proposal, peer_proposals)
                 await self._write_collaboration_file(session_id, llm_name, "refinement", refinement)
+                
+                await emit({
+                    "slot": llm_name,
+                    "event": "refinement.completed", 
+                    "text": f"Refinement complete: {refinement[:60]}...",
+                    "session_id": session_id
+                })
             
             # Phase 3: Vote on best solution
             await asyncio.sleep(1)  # Give time for refinements
+            await emit({
+                "slot": llm_name,
+                "event": "phase.voting", 
+                "text": "Analyzing all solutions and voting...",
+                "session_id": session_id
+            })
+            
             all_solutions = await self._read_all_solutions(session_id)
             vote = await self._get_llm_vote(llm_name, user_input, all_solutions)
             await self._write_collaboration_file(session_id, llm_name, "vote", vote)
             
+            await emit({
+                "slot": llm_name,
+                "event": "vote.completed", 
+                "text": f"Vote cast: {vote[:40]}...",
+                "session_id": session_id
+            })
+            
         except Exception as e:
+            await emit({
+                "slot": llm_name,
+                "event": "error", 
+                "text": f"Error: {str(e)}",
+                "session_id": session_id
+            })
             await self._write_collaboration_file(session_id, llm_name, "error", str(e))
 
     async def _get_llm_proposal(self, llm_name: str, user_input: str, session_id: str) -> str:
@@ -132,15 +199,25 @@ Respond with just: VOTE: <llm_name>"""
         return await call_slot(self.config, llm_name, prompt)
 
     async def _write_collaboration_file(self, session_id: str, llm_name: str, phase: str, content: str):
-        """Write LLM output to collaboration file"""
-        file_path = os.path.join(self.collaboration_folder, f"{session_id}_{llm_name}_{phase}.txt")
+        """Write LLM output to collaboration file as JSON in per-model directory"""
+        # Resolve per-model directory from config
+        base_dir = getattr(self.config, 'collaboration', {}).get('base_directory', './collaboration')
+        model_cfg = self.config.models.get(llm_name, {})
+        model_dir = model_cfg.get('collaboration_directory', f"{base_dir}/{llm_name}")
+        os.makedirs(model_dir, exist_ok=True)
+        
+        # Build filename and JSON payload
+        filename = f"{session_id}_{llm_name}_{phase}.json"
+        file_path = os.path.join(model_dir, filename)
+        payload = {
+            "timestamp": time.time(),
+            "llm": llm_name,
+            "phase": phase,
+            "session": session_id,
+            "content": content,
+        }
         with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(f"Timestamp: {time.time()}\n")
-            f.write(f"LLM: {llm_name}\n")
-            f.write(f"Phase: {phase}\n")
-            f.write(f"Session: {session_id}\n")
-            f.write("=" * 50 + "\n")
-            f.write(content)
+            json.dump(payload, f, ensure_ascii=False, indent=2)
         
         # Update session
         if session_id in self.active_sessions:

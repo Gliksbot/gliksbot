@@ -1,0 +1,7 @@
+{
+  "timestamp": 1756727232.516735,
+  "llm": "specialist1",
+  "phase": "error",
+  "session": "8016e303-11e4-4eaf-bacd-3e57a3d07833",
+  "content": "Unknown provider 'vultr' for LLM 'specialist1'"
+}

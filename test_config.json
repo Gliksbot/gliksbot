@@ -1,0 +1,7 @@
+{
+  "enabled": false,
+  "provider": "ollama",
+  "model": "test-model",
+  "role": "Test Role",
+  "identity": "Test identity"
+}

@@ -1,0 +1,14 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Start Dexter backend (port 8080)",
+			"command": "cd backend && python main.py",
+			"isBackground": true,
+			"group": "build",
+			"problemMatcher": [],
+			"args": []
+		}
+	]
+}

@@ -11,12 +11,15 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # Authentication imports
-from auth import auth_manager, get_current_user
+from backend.auth import auth_manager, get_current_user
 
 # Placeholder imports - you'll replace these with actual implementations
-from dexter_brain.config import Config
-from dexter_brain.campaigns import CampaignManager
-from dexter_brain.collaboration import CollaborationManager
+from backend.dexter_brain.config import Config
+from backend.dexter_brain.campaigns import CampaignManager
+from backend.dexter_brain.collaboration import CollaborationManager
+from backend.dexter_brain.llm import call_slot
+# NEW: BrainDB for STM/LTM
+from backend.dexter_brain.db import BrainDB
 
 CONFIG_PATH = os.environ.get("DEXTER_CONFIG_FILE", "m:/gliksbot/config.json")
 DOWNLOADS_DIR = os.environ.get("DEXTER_DOWNLOADS_DIR", "/tmp/dexter_downloads")
@@ -24,11 +27,27 @@ DOWNLOADS_DIR = os.environ.get("DEXTER_DOWNLOADS_DIR", "/tmp/dexter_downloads")
 # Load config
 _app_cfg: Config = Config.load(CONFIG_PATH)
 
+# Initialize DB for memories (STM/LTM)
+_db: Optional[BrainDB] = None
+try:
+    _db = BrainDB(
+        db_path=_app_cfg.runtime.get('db_path', './dexter.db'),
+        enable_fts=_app_cfg.runtime.get('enable_fts', True)
+    )
+except Exception:
+    _db = None  # Fail open; endpoints continue to work without memory
+
 # Initialize managers
 _campaign_mgr: CampaignManager = None  # Will be initialized after DB setup
 _collab_mgr: CollaborationManager = CollaborationManager(_app_cfg)
 
 app = FastAPI(title="Dexter API v3", version="3.0", docs_url="/docs", redoc_url="/redoc")
+
+# Include API routers
+from backend.dexter_brain import events_api, collaboration_api, skills_api
+app.include_router(events_api.router)
+app.include_router(collaboration_api.router)
+app.include_router(skills_api.router)
 
 ALLOWED_ORIGINS = ["http://localhost:3000","http://127.0.0.1:3000","https://gliksbot.com","https://www.gliksbot.com"]
 app.add_middleware(
@@ -114,6 +133,11 @@ def get_current_user_info(current_user: dict = Depends(get_current_user)):
 
 @app.get("/config", response_model=ConfigOut)
 def get_config(current_user: dict = Depends(get_current_user)):
+    return ConfigOut(config=_app_cfg.to_json())
+
+@app.get("/config/public", response_model=ConfigOut)
+def get_config_public():
+    """Public config endpoint for frontend sync (no auth required)"""
     return ConfigOut(config=_app_cfg.to_json())
 
 @app.put("/config", response_model=ConfigOut)
@@ -282,6 +306,19 @@ async def chat(payload: ChatIn):
         if not executed or not executed.get("ok"):
             executed = await _create_and_test_skill(msg, dexter_reply)
     
+    # 5. Persist this exchange as STM for future context (best-effort)
+    try:
+        if _db is not None:
+            _db.add_memory(
+                content=f"User: {msg}\nDexter: {dexter_reply}",
+                memory_type='stm',
+                metadata={"campaign_id": payload.campaign_id, "session_id": session_id},
+                tags=["chat", "dexter"],
+                importance=0.5
+            )
+    except Exception:
+        pass
+    
     return ChatOut(
         reply=dexter_reply,
         executed=executed,
@@ -289,51 +326,233 @@ async def chat(payload: ChatIn):
         collaboration_session=session_id
     )
 
-@app.get("/collaboration/{session_id}")
-async def get_collaboration_status(session_id: str):
-    """Get status of LLM collaboration session"""
-    results = _collab_mgr.get_collaboration_results(session_id)
-    vote_counts = _collab_mgr.count_votes(session_id)
-    winning_solution = _collab_mgr.get_winning_solution(session_id)
+# Individual LLM Chat Model
+class LLMChatIn(BaseModel):
+    message: str
+    model: str
+    config: Optional[Dict[str, Any]] = None
+
+class LLMChatOut(BaseModel):
+    response: str
+    model: str
+    success: bool
+    error: Optional[str] = None
+
+# TTS Configuration Models
+class TTSSettingsIn(BaseModel):
+    enabled: bool = True
+    rate: float = 1.0
+    pitch: float = 1.0
+    volume: float = 0.8
+    voice: Optional[str] = None
+
+class TTSSettingsOut(BaseModel):
+    settings: Dict[str, Any]
+
+# Individual LLM chat endpoint
+@app.post("/llm/chat", response_model=LLMChatOut)
+async def llm_chat(payload: LLMChatIn):
+    """Chat with a specific LLM model"""
+    try:
+        # Use provided config or fall back to global config
+        if payload.config:
+            # Create a temporary config using the provided settings
+            temp_config = type('obj', (object,), {
+                'models': {payload.model: payload.config}
+            })()
+            response = await call_slot(temp_config, payload.model, payload.message)
+        else:
+            # Use global config
+            if payload.model not in _app_cfg.models:
+                return LLMChatOut(
+                    response="",
+                    model=payload.model,
+                    success=False,
+                    error=f"Model '{payload.model}' not found in configuration"
+                )
+            
+            response = await call_slot(_app_cfg, payload.model, payload.message)
+        
+        return LLMChatOut(
+            response=response,
+            model=payload.model,
+            success=True,
+            error=None
+        )
     
-    return {
-        "session_id": session_id,
-        "status": results.get("status", "unknown"),
-        "llms_participating": results.get("llms", []),
-        "proposals_count": len(results.get("proposals", {})),
-        "refinements_count": len(results.get("refinements", {})),
-        "votes_count": len(results.get("votes", {})),
-        "vote_counts": vote_counts,
-        "winning_solution": winning_solution
+    except Exception as e:
+        return LLMChatOut(
+            response="",
+            model=payload.model,
+            success=False,
+            error=str(e)
+        )
+
+# TTS Configuration endpoints
+@app.get("/tts/settings")
+async def get_tts_settings():
+    """Get global TTS settings"""
+    tts_config = _app_cfg.to_json().get('tts', {
+        'enabled': True,
+        'global_settings': {
+            'rate': 1.0,
+            'pitch': 1.0,
+            'volume': 0.8,
+            'voice': None
+        },
+        'per_model_settings': {}
+    })
+    return TTSSettingsOut(settings=tts_config)
+
+@app.post("/tts/settings")
+async def update_tts_settings(payload: TTSSettingsIn, current_user: dict = Depends(get_current_user)):
+    """Update global TTS settings"""
+    global _app_cfg
+    
+    # Load current config
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+        current = json.load(f)
+    
+    # Ensure tts section exists
+    if 'tts' not in current:
+        current['tts'] = {
+            'enabled': True,
+            'global_settings': {},
+            'per_model_settings': {}
+        }
+    
+    # Update global settings
+    current['tts']['global_settings'] = {
+        'rate': payload.rate,
+        'pitch': payload.pitch,
+        'volume': payload.volume,
+        'voice': payload.voice
     }
+    current['tts']['enabled'] = payload.enabled
+    
+    # Save config
+    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+        json.dump(current, f, indent=2)
+    
+    # Reload config
+    _app_cfg = Config.load(CONFIG_PATH)
+    
+    return TTSSettingsOut(settings=current['tts'])
+
+@app.get("/tts/settings/{model_name}")
+async def get_model_tts_settings(model_name: str):
+    """Get TTS settings for a specific model"""
+    tts_config = _app_cfg.to_json().get('tts', {})
+    model_settings = tts_config.get('per_model_settings', {}).get(model_name, 
+        tts_config.get('global_settings', {
+            'rate': 1.0,
+            'pitch': 1.0,
+            'volume': 0.8,
+            'voice': None,
+            'enabled': True
+        })
+    )
+    return TTSSettingsOut(settings=model_settings)
+
+@app.post("/tts/settings/{model_name}")
+async def update_model_tts_settings(model_name: str, payload: TTSSettingsIn, current_user: dict = Depends(get_current_user)):
+    """Update TTS settings for a specific model"""
+    global _app_cfg
+    
+    # Load current config
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+        current = json.load(f)
+    
+    # Ensure tts section exists
+    if 'tts' not in current:
+        current['tts'] = {
+            'enabled': True,
+            'global_settings': {},
+            'per_model_settings': {}
+        }
+    
+    if 'per_model_settings' not in current['tts']:
+        current['tts']['per_model_settings'] = {}
+    
+    # Update model-specific settings
+    current['tts']['per_model_settings'][model_name] = {
+        'enabled': payload.enabled,
+        'rate': payload.rate,
+        'pitch': payload.pitch,
+        'volume': payload.volume,
+        'voice': payload.voice
+    }
+    
+    # Save config
+    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+        json.dump(current, f, indent=2)
+    
+    # Reload config
+    _app_cfg = Config.load(CONFIG_PATH)
+    
+    return TTSSettingsOut(settings=current['tts']['per_model_settings'][model_name])
 
 @app.get("/collaboration/files")
 async def get_collaboration_files():
-    """Get all collaboration files for all models"""
-    files = {}
+    """Get all collaboration files for all models with status and errors"""
+    response = {}
     base_collab_dir = _app_cfg.collaboration.get('base_directory', './collaboration')
     
     for model_name, model_config in _app_cfg.models.items():
-        if not model_config.get('collaboration_enabled', True):
-            continue
-            
-        model_dir = model_config.get('collaboration_directory', f'{base_collab_dir}/{model_name}')
-        if os.path.exists(model_dir):
-            model_files = []
-            for filename in os.listdir(model_dir):
-                filepath = os.path.join(model_dir, filename)
-                if os.path.isfile(filepath):
-                    stat = os.stat(filepath)
-                    model_files.append({
-                        'name': filename,
-                        'size': stat.st_size,
-                        'modified': stat.st_mtime
-                    })
-            files[model_name] = model_files
-        else:
-            files[model_name] = []
+        # Get model validation status
+        validation_errors = validate_model_config(model_name, model_config)
+        model_status = {
+            'enabled': model_config.get('enabled', False),
+            'status': 'ready' if not validation_errors else 'error',
+            'errors': validation_errors,
+            'provider': model_config.get('provider'),
+            'model': model_config.get('model'),
+            'collaboration_enabled': model_config.get('collaboration_enabled', True)
+        }
+        
+        # Get collaboration files
+        model_files = []
+        if model_config.get('collaboration_enabled', True):
+            model_dir = model_config.get('collaboration_directory', f'{base_collab_dir}/{model_name}')
+            if os.path.exists(model_dir):
+                for filename in os.listdir(model_dir):
+                    filepath = os.path.join(model_dir, filename)
+                    if os.path.isfile(filepath):
+                        stat = os.stat(filepath)
+                        file_info = {
+                            'name': filename,
+                            'size': stat.st_size,
+                            'modified': stat.st_mtime
+                        }
+                        
+                        # Determine file type and priority (supports JSON and legacy TXT)
+                        fname = filename.lower()
+                        ftype = 'unknown'
+                        priority = 'low'
+                        if fname.endswith('.json') or fname.endswith('.txt'):
+                            if '_error.' in fname:
+                                ftype, priority = 'error', 'high'
+                            elif '_proposal.' in fname:
+                                ftype, priority = 'proposal', 'medium'
+                            elif '_refinement.' in fname:
+                                ftype, priority = 'refinement', 'medium'
+                            elif '_vote.' in fname:
+                                ftype, priority = 'vote', 'low'
+                        file_info['type'] = ftype
+                        file_info['priority'] = priority
+                        
+                        model_files.append(file_info)
+                
+                # Sort files by priority (errors first) and then by modification time
+                priority_order = {'high': 0, 'medium': 1, 'low': 2}
+                model_files.sort(key=lambda x: (priority_order.get(x['priority'], 3), -x['modified']))
+        
+        response[model_name] = {
+            'status': model_status,
+            'files': model_files
+        }
     
-    return files
+    return response
 
 @app.get("/collaboration/files/{model_name}/{filename}")
 async def get_collaboration_file_content(model_name: str, filename: str):
@@ -356,9 +575,116 @@ async def get_collaboration_file_content(model_name: str, filename: str):
     except Exception as e:
         raise HTTPException(500, f"Error reading file: {str(e)}")
 
+@app.get("/collaboration/status")
+async def get_collaboration_overview():
+    """Get overview of all LLM slots and their current status"""
+    models = _app_cfg.models
+    
+    # Get active collaboration sessions
+    active_sessions = _collab_mgr.get_active_sessions() if hasattr(_collab_mgr, 'get_active_sessions') else []
+    
+    slots = {}
+    
+    # Add Dexter status (always slot 0 / main)
+    dexter_config = models.get('dexter', {})
+    
+    # Add other numbered slots
+    for i in range(1, 6):  # Slots 1-5
+        slot_key = f"slot_{i}"
+        slot_config = models.get(slot_key) or models.get(f"llm_{i}")
+        
+        if slot_config:
+            error = None
+            if not slot_config.get('enabled'):
+                error = "Slot disabled"
+            elif not slot_config.get('api_key'):
+                error = "Missing API key"
+            elif not slot_config.get('provider'):
+                error = "Missing provider"
+            elif not slot_config.get('model'):
+                error = "Missing model name"
+            
+            # Check if this slot is currently active in any collaboration
+            active = any(slot_key in session.get('participants', []) for session in active_sessions)
+            current_task = None
+            output = None
+            
+            if active:
+                # Get the most recent output for this slot
+                for session in active_sessions:
+                    if slot_key in session.get('participants', []):
+                        current_task = session.get('original_request', 'Working on collaboration...')
+                        # Get latest output from this slot
+                        slot_results = session.get('results', {}).get(slot_key, {})
+                        if slot_results:
+                            output = slot_results.get('latest_output', slot_results.get('proposal', ''))
+                        break
+            
+            slots[slot_key] = {
+                'name': slot_config.get('identity', f'LLM {i}'),
+                'error': error,
+                'active': active,
+                'currentTask': current_task,
+                'output': output,
+                'provider': slot_config.get('provider'),
+                'model': slot_config.get('model'),
+                'enabled': slot_config.get('enabled', False)
+            }
+        # If no config, slot will be None and handled by frontend as "not configured"
+    
+    return {
+        'active': len(active_sessions) > 0,
+        'sessions': len(active_sessions),
+        'slots': slots
+    }
+
+@app.get("/collaboration/{session_id}")
+async def get_collaboration_status(session_id: str):
+    """Get status of LLM collaboration session"""
+    results = _collab_mgr.get_collaboration_results(session_id)
+    vote_counts = _collab_mgr.count_votes(session_id)
+    winning_solution = _collab_mgr.get_winning_solution(session_id)
+    
+    return {
+        "session_id": session_id,
+        "status": results.get("status", "unknown"),
+        "llms_participating": results.get("llms", []),
+        "proposals_count": len(results.get("proposals", {})),
+        "refinements_count": len(results.get("refinements", {})),
+        "votes_count": len(results.get("votes", {})),
+        "vote_counts": vote_counts,
+        "winning_solution": winning_solution
+    }
+
 @app.post("/models/{model_name}/config")
 async def update_model_config(model_name: str, payload: Dict[str, Any], current_user: dict = Depends(get_current_user)):
-    """Update configuration for a specific model"""
+    """Update configuration for a specific model (authenticated)"""
+    global _app_cfg, _collab_mgr
+    
+    # Load current config
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+        current = json.load(f)
+    
+    # Ensure models section exists
+    if 'models' not in current:
+        current['models'] = {}
+    
+    # Update the specific model
+    current['models'][model_name] = payload
+    
+    # Save config
+    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+        json.dump(current, f, indent=2)
+    
+    # Reload config and managers
+    _app_cfg = Config.load(CONFIG_PATH)
+    _collab_mgr = CollaborationManager(_app_cfg)
+    
+    return {"message": f"Model {model_name} configuration updated", "config": payload}
+
+@app.post("/system/models/{model_name}/config")
+async def update_model_config_system(model_name: str, payload: Dict[str, Any]):
+    """Update configuration for a specific model (system access, no auth required)"""
     global _app_cfg, _collab_mgr
     
     # Load current config
@@ -439,123 +765,39 @@ async def get_chat_history(current_user: dict = Depends(get_current_user)):
     # TODO: Implement actual chat history storage/retrieval
     return {"interactions": []}
 
-@app.get("/collaboration/status")
-async def get_collaboration_overview():
-    """Get overview of all LLM slots and their current status"""
-    models = _app_cfg.models
-    
-    # Get active collaboration sessions
-    active_sessions = _collab_mgr.get_active_sessions() if hasattr(_collab_mgr, 'get_active_sessions') else []
-    
-    slots = {}
-    
-    # Add Dexter status (always slot 0 / main)
-    dexter_config = models.get('dexter', {})
-    
-    # Add other numbered slots
-    for i in range(1, 6):  # Slots 1-5
-        slot_key = f"slot_{i}"
-        slot_config = models.get(slot_key) or models.get(f"llm_{i}")
-        
-        if slot_config:
-            error = None
-            if not slot_config.get('enabled'):
-                error = "Slot disabled"
-            elif not slot_config.get('api_key'):
-                error = "Missing API key"
-            elif not slot_config.get('provider'):
-                error = "Missing provider"
-            elif not slot_config.get('model'):
-                error = "Missing model name"
-            
-            # Check if this slot is currently active in any collaboration
-            active = any(slot_key in session.get('participants', []) for session in active_sessions)
-            current_task = None
-            output = None
-            
-            if active:
-                # Get the most recent output for this slot
-                for session in active_sessions:
-                    if slot_key in session.get('participants', []):
-                        current_task = session.get('original_request', 'Working on collaboration...')
-                        # Get latest output from this slot
-                        slot_results = session.get('results', {}).get(slot_key, {})
-                        if slot_results:
-                            output = slot_results.get('latest_output', slot_results.get('proposal', ''))
-                        break
-            
-            slots[slot_key] = {
-                'name': slot_config.get('identity', f'LLM {i}'),
-                'error': error,
-                'active': active,
-                'currentTask': current_task,
-                'output': output,
-                'provider': slot_config.get('provider'),
-                'model': slot_config.get('model'),
-                'enabled': slot_config.get('enabled', False)
-            }
-        # If no config, slot will be None and handled by frontend as "not configured"
-    
-    return {
-        'active': len(active_sessions) > 0,
-        'sessions': len(active_sessions),
-        'slots': slots
-    }
-
-@app.post("/models/{slot_id}/config")
-async def update_model_config(slot_id: str, payload: dict):
-    """Update a specific parameter for a model slot"""
-    parameter = payload.get('parameter')
-    value = payload.get('value')
-    
-    if not parameter:
-        raise HTTPException(400, "Parameter name required")
-    
-    # Load current config
-    try:
-        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-            config_data = json.load(f)
-    except Exception as e:
-        raise HTTPException(500, f"Failed to load config: {str(e)}")
-    
-    # Ensure models section exists
-    if 'models' not in config_data:
-        config_data['models'] = {}
-    
-    # Ensure slot exists
-    if slot_id not in config_data['models']:
-        config_data['models'][slot_id] = {}
-    
-    slot_config = config_data['models'][slot_id]
-    
-    # Update the parameter
-    if parameter == 'temperature':
-        if 'params' not in slot_config:
-            slot_config['params'] = {}
-        slot_config['params']['temperature'] = value
-    else:
-        slot_config[parameter] = value
-    
-    # Save config
-    try:
-        with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
-            json.dump(config_data, f, indent=2)
-    except Exception as e:
-        raise HTTPException(500, f"Failed to save config: {str(e)}")
-    
-    # Reload app config
-    global _app_cfg, _collab_mgr
-    _app_cfg = Config.load(CONFIG_PATH)
-    _collab_mgr = CollaborationManager(_app_cfg)
-    
-    return {"ok": True, "message": f"Updated {parameter} for {slot_id}"}
-
 # Helper functions
+def _build_memory_context(user_input: str) -> str:
+    """Assemble memory snippets from LTM (semantic) and STM (recent) for prompt context."""
+    if _db is None:
+        return ""
+    try:
+        # Semantic search across memories, prefer LTM
+        candidates = _db.search_memories(user_input, limit=10)
+        ltm = [m for m in candidates if (m.get('type') == 'ltm')][:5]
+        # Recent STM by recency
+        stm = _db.get_memories('stm', limit=5)
+
+        def fmt(m):
+            txt = (m.get('content') or '').strip().replace('\r', '')
+            return txt[:500]
+
+        parts: List[str] = []
+        if ltm:
+            parts.append("Relevant long-term memories:\n" + "\n".join(f"- {fmt(m)}" for m in ltm))
+        if stm:
+            parts.append("Recent short-term context:\n" + "\n".join(f"- {fmt(m)}" for m in stm))
+        return "\n\n".join(parts)
+    except Exception:
+        return ""
+
 async def _get_dexter_response(user_input: str) -> str:
     """Get Dexter's immediate response"""
     try:
         from .dexter_brain.llm import call_slot
-        response = await call_slot(_app_cfg, 'dexter', user_input)
+        # Prepend memory context if available
+        mem_ctx = _build_memory_context(user_input)
+        prompt = f"{mem_ctx}\n\nUser: {user_input}" if mem_ctx else user_input
+        response = await call_slot(_app_cfg, 'dexter', prompt)
         return response
     except Exception as e:
         # If we can't call Dexter, return an error message instead of fake data

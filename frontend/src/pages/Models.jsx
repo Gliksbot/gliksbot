@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { api } from '../api'
 
 export default function Models() {
-  const [config, setConfig] = useState({})
+  const [models, setModels] = useState({})
   const [selectedModel, setSelectedModel] = useState('dexter')
   const [editingModel, setEditingModel] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -10,18 +10,25 @@ export default function Models() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    loadConfig()
+    loadModels()
   }, [])
 
-  const loadConfig = async () => {
+  const loadModels = async () => {
     try {
       setLoading(true)
       setError('')
-      const { data } = await api.get('/config')
-      setConfig(data || {})
+      const { data } = await api.get('/models')
+      
+      // Convert array to object for easier access
+      const modelsObj = {}
+      data.models.forEach(model => {
+        modelsObj[model.name] = model
+      })
+      
+      setModels(modelsObj)
     } catch (error) {
-      console.error('Failed to load config:', error)
-      setError('Failed to load configuration: ' + (error?.response?.data?.detail || error.message))
+      console.error('Failed to load models:', error)
+      setError('Failed to load models: ' + (error?.response?.data?.detail || error.message))
     } finally {
       setLoading(false)
     }
@@ -31,15 +38,12 @@ export default function Models() {
     try {
       setSaving(true)
       setError('')
-      await api.post(`/models/${modelName}/config`, updatedConfig)
+      await api.post(`/system/models/${modelName}/config`, updatedConfig)
       
       // Update local state
-      setConfig(prev => ({
+      setModels(prev => ({
         ...prev,
-        models: {
-          ...prev.models,
-          [modelName]: updatedConfig
-        }
+        [modelName]: { ...prev[modelName], ...updatedConfig }
       }))
       
       setEditingModel(null)
@@ -79,24 +83,43 @@ export default function Models() {
     }
 
     const getStatus = () => {
-      if (!localConfig.enabled) return { status: 'disabled', color: 'yellow', text: 'Disabled' }
-      if (!localConfig.provider) return { status: 'error', color: 'red', text: 'No Provider Configured' }
-      if (!localConfig.model) return { status: 'error', color: 'red', text: 'No Model Specified' }
-      if (!localConfig.endpoint && !localConfig.local_model) return { status: 'error', color: 'red', text: 'No Endpoint URL' }
-      if (!localConfig.api_key_env && !localConfig.local_model) return { status: 'error', color: 'red', text: 'Missing API Key Environment Variable' }
-      return { status: 'active', color: 'green', text: 'Ready' }
+      // Use the status and validation_errors from the backend
+      if (modelConfig.validation_errors && modelConfig.validation_errors.length > 0) {
+        return { status: 'error', color: 'red', text: 'Configuration Error', errors: modelConfig.validation_errors }
+      }
+      
+      switch (modelConfig.status) {
+        case 'active':
+          return { status: 'active', color: 'green', text: 'Ready' }
+        case 'disabled':
+          return { status: 'disabled', color: 'yellow', text: 'Disabled' }
+        case 'error':
+          return { status: 'error', color: 'red', text: 'Error', errors: modelConfig.validation_errors }
+        default:
+          return { status: 'unknown', color: 'gray', text: 'Unknown' }
+      }
     }
 
     const status = getStatus()
 
     return (
-      <div className="border border-slate-600 rounded-lg p-6 bg-slate-800/50">
+        <div className="border border-slate-600 rounded-lg p-6 bg-slate-800/50">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold capitalize">{modelName}</h2>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium bg-${status.color}-600/20 text-${status.color}-400 border border-${status.color}-600/30`}>
-              {status.text}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={`px-3 py-1 rounded-full text-sm font-medium bg-${status.color}-600/20 text-${status.color}-400 border border-${status.color}-600/30`}>
+                {status.text}
+              </span>
+              {/* Large Enabled/Disabled Indicator */}
+              <div className={`px-4 py-2 rounded-lg font-bold text-sm border-2 ${
+                localConfig.enabled 
+                  ? 'bg-green-600/30 text-green-300 border-green-500' 
+                  : 'bg-red-600/30 text-red-300 border-red-500'
+              }`}>
+                {localConfig.enabled ? '🟢 ENABLED' : '🔴 DISABLED'}
+              </div>
+            </div>
           </div>
           <div className="flex gap-2">
             {editingModel === modelName ? (
@@ -128,6 +151,18 @@ export default function Models() {
             )}
           </div>
         </div>
+
+        {/* Display validation errors if any */}
+        {status.errors && status.errors.length > 0 && (
+          <div className="mb-6 p-4 bg-red-900/30 border border-red-600/50 rounded-lg">
+            <h3 className="font-semibold text-red-400 mb-2">Configuration Issues:</h3>
+            <ul className="list-disc list-inside space-y-1 text-red-300 text-sm">
+              {status.errors.map((error, index) => (
+                <li key={index}>{error}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Basic Configuration */}
@@ -222,6 +257,19 @@ export default function Models() {
                 placeholder="http://localhost:11434"
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 disabled:opacity-50"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Collaboration Enabled</label>
+              <select
+                value={localConfig.collaboration_enabled ? 'true' : 'false'}
+                onChange={(e) => updateField('collaboration_enabled', e.target.value === 'true')}
+                disabled={editingModel !== modelName}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 disabled:opacity-50"
+              >
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+              </select>
             </div>
           </div>
 
@@ -376,14 +424,12 @@ export default function Models() {
     )
   }
 
-  const models = config.models || {}
-
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Model Configuration</h1>
         <button
-          onClick={loadConfig}
+          onClick={loadModels}
           disabled={loading}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg font-medium"
         >
@@ -410,21 +456,35 @@ export default function Models() {
             <div className="flex flex-wrap gap-2">
               {Object.keys(models).map((modelName) => {
                 const model = models[modelName]
-                const isActive = model?.enabled
+                const isEnabled = model?.enabled
+                const hasErrors = model?.validation_errors && model.validation_errors.length > 0
+                
                 return (
                   <button
                     key={modelName}
                     onClick={() => setSelectedModel(modelName)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    className={`px-4 py-2 rounded-lg font-medium transition-all border-2 ${
                       selectedModel === modelName
-                        ? 'bg-blue-600 text-white'
-                        : isActive
-                        ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
-                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        ? 'bg-blue-600 text-white border-blue-400'
+                        : hasErrors
+                        ? 'bg-red-600/20 text-red-400 border-red-600/50 hover:bg-red-600/30'
+                        : isEnabled
+                        ? 'bg-green-600/20 text-green-400 border-green-600/50 hover:bg-green-600/30'
+                        : 'bg-slate-700/50 text-slate-400 border-slate-600 hover:bg-slate-600'
                     }`}
                   >
-                    <span className="capitalize">{modelName}</span>
-                    {isActive && <span className="ml-2 text-xs">●</span>}
+                    <div className="flex items-center gap-2">
+                      <span className="capitalize">{modelName}</span>
+                      <div className="flex items-center gap-1">
+                        {hasErrors && <span className="text-red-400 text-xs">⚠</span>}
+                        <span className={`w-2 h-2 rounded-full ${
+                          hasErrors ? 'bg-red-500' : isEnabled ? 'bg-green-500' : 'bg-slate-500'
+                        }`}></span>
+                        <span className="text-xs font-normal">
+                          {hasErrors ? 'ERROR' : isEnabled ? 'ON' : 'OFF'}
+                        </span>
+                      </div>
+                    </div>
                   </button>
                 )
               })}
@@ -438,19 +498,6 @@ export default function Models() {
               modelConfig={models[selectedModel]}
             />
           )}
-
-          {/* Voting Weights */}
-          <div className="bg-slate-800/30 rounded-lg p-6">
-            <h2 className="text-lg font-semibold mb-4">Voting Weights</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {Object.entries(config.voting?.weights || {}).map(([model, weight]) => (
-                <div key={model} className="text-center">
-                  <div className="text-sm text-slate-400 capitalize">{model}</div>
-                  <div className="text-lg font-semibold">{(weight * 100).toFixed(0)}%</div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
     </div>
