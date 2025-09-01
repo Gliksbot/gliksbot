@@ -60,6 +60,122 @@ class TTSManager {
 // Global TTS instance
 const tts = new TTSManager()
 
+// Collaboration Pane Component
+function CollabPane({ slotName }) {
+  const [preview, setPreview] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [userInput, setUserInput] = useState('')
+  const [lastUpdate, setLastUpdate] = useState(Date.now())
+  const [error, setError] = useState('')
+  
+  const loadCollabData = async () => {
+    try {
+      setError('')
+      const response = await api.get(`/collaboration/head?slot=${slotName}&n=1`)
+      if (response.data?.items?.length > 0) {
+        const latestItem = response.data.items[0]
+        let displayText = latestItem.text || JSON.stringify(latestItem)
+        setPreview(displayText)
+        setLastUpdate(Date.now())
+      } else {
+        setPreview('No recent collaboration activity')
+      }
+    } catch (err) {
+      setError('Error loading collaboration data: ' + err.message)
+      setPreview('Error loading data')
+    }
+  }
+  
+  const sendUserInput = async () => {
+    if (!userInput.trim()) return
+    
+    setLoading(true)
+    try {
+      const response = await api.post(`/collaboration/input/${slotName}`, {
+        message: userInput,
+      })
+      
+      if (response.data.success) {
+        setUserInput('')
+        // Refresh collaboration data to show the response
+        setTimeout(loadCollabData, 1000)
+      } else {
+        setError('Error: ' + (response.data.error || 'Failed to send message'))
+      }
+    } catch (error) {
+      setError('Error sending message: ' + error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+  
+  useEffect(() => {
+    loadCollabData()
+    
+    // Auto-refresh every 5 seconds
+    const interval = setInterval(loadCollabData, 5000)
+    return () => clearInterval(interval)
+  }, [slotName])
+  
+  return (
+    <div className="h-full flex flex-col p-3 space-y-3">
+      {/* Header with refresh */}
+      <div className="flex items-center justify-between">
+        <h5 className="text-sm font-medium text-white">Collaboration Activity</h5>
+        <button 
+          onClick={loadCollabData}
+          className="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-white"
+          title="Refresh collaboration data"
+        >
+          🔄 Refresh
+        </button>
+      </div>
+      
+      {/* User Input Section */}
+      <div className="space-y-2">
+        <label className="text-xs text-slate-300">Send message to {slotName}:</label>
+        <div className="flex space-x-2">
+          <input
+            type="text"
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && sendUserInput()}
+            placeholder="Type your message..."
+            className="flex-1 text-xs px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white placeholder-slate-400"
+            disabled={loading}
+          />
+          <button
+            onClick={sendUserInput}
+            disabled={loading || !userInput.trim()}
+            className="text-xs bg-green-600 hover:bg-green-500 disabled:bg-gray-600 px-3 py-1 rounded text-white"
+          >
+            {loading ? '...' : 'Send'}
+          </button>
+        </div>
+      </div>
+      
+      {/* Error Display */}
+      {error && (
+        <div className="text-xs bg-red-900 border border-red-600 rounded p-2 text-red-200">
+          {error}
+        </div>
+      )}
+      
+      {/* Collaboration Content */}
+      <div className="flex-1 bg-slate-800 border border-slate-600 rounded p-2 overflow-auto">
+        <div className="text-xs font-mono text-slate-300 whitespace-pre-wrap">
+          {preview || 'Loading collaboration data...'}
+        </div>
+      </div>
+      
+      {/* Footer with update time */}
+      <div className="text-xs text-slate-500 text-center">
+        Last updated: {new Date(lastUpdate).toLocaleTimeString()}
+      </div>
+    </div>
+  )
+}
+
 // Individual LLM Chat & Config Interface
 function LLMInterface({ slotName, events, isActive, config, onConfigUpdate }) {
   const [activeTab, setActiveTab] = useState('chat') // 'chat', 'config', 'monitor', 'tts'
@@ -265,7 +381,7 @@ function LLMInterface({ slotName, events, isActive, config, onConfigUpdate }) {
         
         {/* Tabs */}
         <div className="flex gap-1">
-          {['chat', 'config', 'monitor', 'tts'].map(tab => (
+          {['chat', 'collab', 'config', 'monitor', 'tts'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -276,6 +392,7 @@ function LLMInterface({ slotName, events, isActive, config, onConfigUpdate }) {
               }`}
             >
               {tab === 'chat' ? '💬' : 
+               tab === 'collab' ? '🤝' :
                tab === 'config' ? '⚙️' : 
                tab === 'monitor' ? '📊' : 
                '🔊'} {tab}
@@ -373,6 +490,10 @@ function LLMInterface({ slotName, events, isActive, config, onConfigUpdate }) {
               </form>
             </div>
           </div>
+        )}
+
+        {activeTab === 'collab' && (
+          <CollabPane slotName={slotName} />
         )}
 
         {activeTab === 'config' && (

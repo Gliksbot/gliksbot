@@ -575,6 +575,157 @@ async def get_collaboration_file_content(model_name: str, filename: str):
     except Exception as e:
         raise HTTPException(500, f"Error reading file: {str(e)}")
 
+@app.get("/api/collaboration/head")
+async def get_collaboration_head(slot: str, n: int = 1):
+    """Get recent collaboration data for a specific LLM slot"""
+    try:
+        # Map slot names to model names  
+        model_name = slot
+        if slot.startswith('slot_'):
+            # Handle slot_1, slot_2, etc.
+            slot_num = slot.split('_')[1]
+            model_name = f"slot_{slot_num}"
+        
+        # Check if model exists in config
+        if model_name not in _app_cfg.models:
+            return {"items": []}
+        
+        model_config = _app_cfg.models[model_name]
+        if not model_config.get('enabled', False):
+            return {"items": []}
+        
+        # Get active sessions and find latest content for this model
+        active_sessions = _collab_mgr.get_active_sessions() if hasattr(_collab_mgr, 'get_active_sessions') else []
+        items = []
+        
+        # Check active session data first
+        for session in active_sessions:
+            slot_results = session.get('results', {}).get(model_name, {})
+            if slot_results:
+                # Get the latest output (refinement > proposal > vote)
+                latest_content = None
+                if 'latest_output' in slot_results:
+                    latest_content = slot_results['latest_output']
+                elif 'proposal' in slot_results:
+                    latest_content = slot_results['proposal']
+                elif 'vote' in slot_results:
+                    latest_content = slot_results['vote']
+                
+                if latest_content:
+                    items.append({
+                        'text': latest_content,
+                        'timestamp': session.get('started_ts', time.time()),
+                        'session_id': session.get('id', ''),
+                        'source': 'active_session'
+                    })
+        
+        # If no active session data, check collaboration files
+        if not items:
+            base_collab_dir = _app_cfg.collaboration.get('base_directory', './collaboration')
+            
+            # Check both main collaboration folder and model-specific folder
+            file_locations = [
+                base_collab_dir,  # Main folder with session_id_model_phase.txt format
+                model_config.get('collaboration_directory', f'{base_collab_dir}/{model_name}')  # Model folder
+            ]
+            
+            for location in file_locations:
+                if os.path.exists(location):
+                    files = []
+                    for filename in os.listdir(location):
+                        if model_name in filename or (location.endswith(model_name) and filename.endswith(('.json', '.txt'))):
+                            filepath = os.path.join(location, filename)
+                            if os.path.isfile(filepath):
+                                files.append((filepath, os.path.getmtime(filepath)))
+                    
+                    # Sort by modification time (newest first) and take top n
+                    files.sort(key=lambda x: x[1], reverse=True)
+                    for filepath, mtime in files[:n]:
+                        try:
+                            with open(filepath, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                            
+                            # Handle both JSON and TXT formats
+                            text_content = content
+                            if filepath.endswith('.json'):
+                                try:
+                                    json_data = json.loads(content)
+                                    text_content = json_data.get('content', content)
+                                except:
+                                    text_content = content
+                            else:
+                                # For .txt files, extract the content after the header
+                                lines = content.split('\n')
+                                content_start = -1
+                                for i, line in enumerate(lines):
+                                    if '=====' in line:
+                                        content_start = i + 1
+                                        break
+                                if content_start > 0:
+                                    text_content = '\n'.join(lines[content_start:])
+                            
+                            items.append({
+                                'text': text_content,
+                                'timestamp': mtime,
+                                'filename': os.path.basename(filepath),
+                                'source': 'file'
+                            })
+                        except Exception as e:
+                            continue
+                    
+                    if items:
+                        break
+        
+        # Limit results to n items
+        items = items[:n]
+        
+        return {"items": items}
+        
+    except Exception as e:
+        return {"items": [], "error": str(e)}
+
+@app.post("/api/collaboration/input/{slot}")
+async def send_input_to_slot(slot: str, message: dict):
+    """Send user input directly to a specific LLM slot"""
+    try:
+        user_message = message.get('message', '')
+        if not user_message:
+            raise HTTPException(400, "Message content is required")
+        
+        # Map slot to model name
+        model_name = slot
+        if slot.startswith('slot_'):
+            model_name = slot
+        
+        # Check if model exists and is enabled
+        if model_name not in _app_cfg.models:
+            raise HTTPException(404, f"Model {model_name} not found")
+        
+        model_config = _app_cfg.models[model_name]
+        if not model_config.get('enabled', False):
+            raise HTTPException(400, f"Model {model_name} is not enabled")
+        
+        # Create a direct chat with the LLM (bypass collaboration for direct user input)
+        from backend.dexter_brain.llm import call_slot
+        response = await call_slot(_app_cfg, model_name, user_message)
+        
+        # Also write this interaction to collaboration files for visibility
+        session_id = f"user_input_{int(time.time())}"
+        await _collab_mgr._write_collaboration_file(session_id, model_name, "user_response", response)
+        
+        return {
+            "success": True,
+            "model": model_name,
+            "response": response,
+            "session_id": session_id
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 @app.get("/collaboration/status")
 async def get_collaboration_overview():
     """Get overview of all LLM slots and their current status"""
