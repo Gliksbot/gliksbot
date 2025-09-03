@@ -36,6 +36,27 @@ if not exist frontend\dist (
 REM Create logs directory if it doesn't exist
 if not exist logs mkdir logs
 
+REM Check sandbox capabilities
+echo [INFO] Checking sandbox capabilities...
+set SANDBOX_MODE=Limited
+powershell -Command "Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -ErrorAction SilentlyContinue" >nul 2>&1
+if not errorlevel 1 (
+    echo [SUCCESS] Hyper-V detected - Full sandbox mode available
+    set SANDBOX_MODE=Hyper-V
+) else (
+    docker --version >nul 2>&1
+    if not errorlevel 1 (
+        echo [SUCCESS] Docker detected - Container sandbox mode available
+        set SANDBOX_MODE=Docker
+    ) else (
+        echo [WARNING] ⚠️  No sandbox providers detected - Limited mode only
+        echo [WARNING] Install Hyper-V or Docker for full capabilities
+    )
+)
+
+echo [INFO] Sandbox mode: %SANDBOX_MODE%
+echo.
+
 echo [INFO] Starting backend server...
 start "Dexter Backend" cmd /k "cd backend && python main.py"
 
@@ -54,10 +75,12 @@ echo.
 echo 🌐 Frontend: http://localhost:3000
 echo 🔧 Backend API: http://localhost:8000
 echo 📚 API Docs: http://localhost:8000/docs
+echo 🔧 Sandbox Mode: %SANDBOX_MODE%
 echo.
 echo 📄 Two terminal windows have opened for frontend and backend
 echo 🛑 Close the terminal windows to stop the services
 echo 💡 For production deployment, use the production_setup.ps1 script
+echo 📋 If Hyper-V fails, Docker will be used as sandbox fallback
 echo.
 
 REM Show quick demo option

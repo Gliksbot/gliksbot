@@ -113,8 +113,8 @@ function CollabPane({ slotName }) {
   useEffect(() => {
     loadCollabData()
     
-    // Auto-refresh every 5 seconds
-    const interval = setInterval(loadCollabData, 5000)
+    // Auto-refresh every 2 minutes (reduced from 5 seconds to reduce UI churn)
+    const interval = setInterval(loadCollabData, 120000) // Changed from 5000ms to 120000ms
     return () => clearInterval(interval)
   }, [slotName])
   
@@ -229,7 +229,7 @@ function LLMInterface({ slotName, events, isActive, config, onConfigUpdate }) {
     }
   }, [config, slotName])
 
-  // Real-time config sync - poll for config changes every 3 seconds
+  // Reduced config sync polling - only poll every 60 seconds to reduce UI churn
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -242,7 +242,7 @@ function LLMInterface({ slotName, events, isActive, config, onConfigUpdate }) {
       } catch (error) {
         // Silently handle polling errors
       }
-    }, 3000)
+    }, 60000) // Changed from 3000ms to 60000ms (1 minute)
 
     return () => clearInterval(interval)
   }, [slotName, config, onConfigUpdate])
@@ -922,11 +922,11 @@ export default function ResizableGrid() {
     loadConfigs()
   }, [])
 
-  // Poll for config changes every 2 seconds to catch external file changes
+  // Poll for config changes every 30 seconds to catch external file changes (reduced from 2 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
       loadConfigs()
-    }, 2000)
+    }, 30000) // Changed from 2000ms to 30000ms
     
     return () => clearInterval(interval)
   }, [])
