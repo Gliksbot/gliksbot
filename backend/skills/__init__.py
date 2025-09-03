@@ -6,7 +6,7 @@ Each skill module should implement a run(message) function that takes a user mes
 and returns results or performs actions.
 
 Usage:
-    from backend.skills.skills_manager import SkillsManager
+from .skills_manager import SkillsManager
     
     # Initialize the skills manager
     skills_mgr = SkillsManager("/path/to/skills")

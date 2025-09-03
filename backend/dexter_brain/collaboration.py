@@ -5,8 +5,8 @@ import os
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Callable
-from backend.dexter_brain.llm import call_slot
-from backend.dexter_brain.events import emit
+from .llm import call_slot
+from .events import emit
 
 class CollaborationManager:
     def __init__(self, config, collaboration_folder: str | None = None):
