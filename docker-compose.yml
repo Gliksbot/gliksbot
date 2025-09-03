@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  dexter-backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+      - ./vm_shared:/app/vm_shared
+    environment:
+      - PYTHONPATH=/app
+    depends_on:
+      - dexter-sandbox
+    networks:
+      - dexter-network
+
+  dexter-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - dexter-backend
+    networks:
+      - dexter-network
+
+  dexter-sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    volumes:
+      - ./vm_shared:/home/sandbox/workspace
+    networks:
+      - dexter-network
+    profiles:
+      - sandbox
+
+networks:
+  dexter-network:
+    driver: bridge
+
+volumes:
+  dexter-logs:
+  dexter-shared:
