@@ -28,17 +28,18 @@ class DockerSandbox:
         self.timeout_sec = docker_config.get('timeout_sec', 60)
         self.network_mode = docker_config.get('network_mode', 'none')
         
-        # Ensure host shared directory exists
-        Path(self.host_shared_dir).mkdir(parents=True, exist_ok=True)
+        # Ensure host shared directory exists and is absolute
+        self.host_shared_dir = Path(self.host_shared_dir).resolve()
+        self.host_shared_dir.mkdir(parents=True, exist_ok=True)
         
     async def execute_skill(self, skill_code: str, test_code: Optional[str] = None) -> Dict[str, Any]:
         """Execute skill code in isolated Docker container."""
         execution_start = time.time()
         
         try:
-            # Create unique execution directory
+            # Create unique execution directory with absolute path
             execution_id = f"execution_{int(time.time() * 1000)}"
-            execution_dir = Path(self.host_shared_dir) / execution_id
+            execution_dir = self.host_shared_dir / execution_id
             execution_dir.mkdir(exist_ok=True)
             
             # Write skill and test files
@@ -102,7 +103,10 @@ class DockerSandbox:
     async def _run_in_container(self, execution_dir: Path, command: list, run_id: str) -> Dict[str, Any]:
         """Run a command in a Docker container."""
         try:
-            # Prepare volume mount
+            # Ensure execution directory is absolute
+            execution_dir = execution_dir.resolve()
+            
+            # Prepare volume mount with absolute path
             volume_mount = {
                 str(execution_dir): {
                     'bind': self.container_shared_dir,

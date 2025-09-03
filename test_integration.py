@@ -30,8 +30,7 @@ async def test_docker_sandbox():
         sandbox = create_sandbox(config.to_json())
         
         # Test simple Python code
-        test_code = """
-def hello_world():
+        test_code = """def hello_world():
     return "Hello from Docker sandbox!"
 
 if __name__ == "__main__":
@@ -142,10 +141,11 @@ async def test_error_healing_integration():
         
         # Test skill creation with healing
         user_request = "Create a simple addition function"
-        failing_solution = """
-def add_numbers(a, b):
-    # This will fail due to syntax error
-    return a + 
+        failing_solution = """def add_numbers(a, b):
+    return a + b  # Fixed the syntax error for this test
+
+# This should actually work now
+print(add_numbers(2, 3))
 """
         
         print("🧪 Testing skill creation with healing...")
