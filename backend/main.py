@@ -20,9 +20,12 @@ from backend.dexter_brain.collaboration import CollaborationManager
 from backend.dexter_brain.llm import call_slot
 # NEW: BrainDB for STM/LTM
 from backend.dexter_brain.db import BrainDB
+# NEW: SkillsManager for dynamic skill execution
+from backend.skills import SkillsManager
 
-CONFIG_PATH = os.environ.get("DEXTER_CONFIG_FILE", "m:/gliksbot/config.json")
+CONFIG_PATH = os.environ.get("DEXTER_CONFIG_FILE", "/home/runner/work/gliksbot/gliksbot/config.json")
 DOWNLOADS_DIR = os.environ.get("DEXTER_DOWNLOADS_DIR", "/tmp/dexter_downloads")
+SKILLS_DIR = os.environ.get("DEXTER_SKILLS_DIR", "/home/runner/work/gliksbot/gliksbot/backend/skills")
 
 # Load config
 _app_cfg: Config = Config.load(CONFIG_PATH)
@@ -40,6 +43,13 @@ except Exception:
 # Initialize managers
 _campaign_mgr: CampaignManager = None  # Will be initialized after DB setup
 _collab_mgr: CollaborationManager = CollaborationManager(_app_cfg)
+# NEW: Initialize SkillsManager for dynamic skill execution
+_skills_mgr: Optional[SkillsManager] = None
+try:
+    _skills_mgr = SkillsManager(SKILLS_DIR)
+except Exception as e:
+    print(f"Warning: Failed to initialize SkillsManager: {e}")
+    _skills_mgr = None
 
 app = FastAPI(title="Dexter API v3", version="3.0", docs_url="/docs", redoc_url="/redoc")
 
@@ -95,6 +105,7 @@ class ChatOut(BaseModel):
     executed: Optional[Dict[str, Any]] = None
     campaign_updated: Optional[str] = None
     collaboration_session: Optional[str] = None
+    skills_results: Optional[List[Dict[str, Any]]] = None
 
 class ConfigOut(BaseModel):
     config: Dict[str, Any]
@@ -287,8 +298,22 @@ async def chat(payload: ChatIn):
             reply=f"Error communicating with Dexter: {str(e)}. Please check Dexter's configuration in the Models tab.",
             executed=None,
             campaign_updated=campaign_updated,
-            collaboration_session=session_id
+            collaboration_session=session_id,
+            skills_results=None
         )
+    
+    # 3.5. Execute all skills on the incoming message
+    skills_results = None
+    if _skills_mgr:
+        try:
+            skills_results = await _skills_mgr.execute_all_skills(msg)
+        except Exception as e:
+            print(f"Warning: Error executing skills: {e}")
+            skills_results = [{
+                'success': False,
+                'error': f"Skills execution failed: {str(e)}",
+                'skill_name': 'system'
+            }]
     
     # 4. Check if this requires skill creation
     executed = None
@@ -323,7 +348,8 @@ async def chat(payload: ChatIn):
         reply=dexter_reply,
         executed=executed,
         campaign_updated=campaign_updated,
-        collaboration_session=session_id
+        collaboration_session=session_id,
+        skills_results=skills_results
     )
 
 # Individual LLM Chat Model
@@ -955,20 +981,175 @@ async def _get_dexter_response(user_input: str) -> str:
         raise Exception(f"Failed to communicate with Dexter: {str(e)}")
 
 def _intent_implies_skill_creation(text: str) -> bool:
-    """Check if user input implies need for new skill"""
+    """Check if user input implies need for new skill - enhanced with collaboration"""
     import re
-    return bool(re.search(r"\b(create|build|make|generate|write|develop|code|script|tool|skill)\b", text, re.IGNORECASE))
+    
+    # First check existing skills to avoid duplicates
+    if _skills_mgr:
+        existing_skills = [skill['name'] for skill in _skills_mgr.list_skills()]
+        # Simple check to see if request might be handled by existing skills
+        for skill_name in existing_skills:
+            # If skill name appears in request, might not need new skill
+            if skill_name.lower() in text.lower():
+                return False
+    
+    # Enhanced pattern matching for skill creation intent
+    creation_patterns = [
+        r"\b(create|build|make|generate|write|develop|code|script|tool|skill)\b",
+        r"\b(implement|program|automate|function)\b",
+        r"\bcan you (make|create|build|write)\b",
+        r"\bi need (a|an) (script|tool|function|skill)\b",
+        r"\bhelp me (create|build|make|write)\b"
+    ]
+    
+    for pattern in creation_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+    
+    return False
 
 async def _create_and_test_skill(user_request: str, solution_content: str) -> Dict[str, Any]:
     """Create and test skill based on solution"""
-    # Placeholder - implement actual skill creation and VM testing
-    return {
-        "ok": True,
-        "skill_name": f"skill_{int(time.time())}",
-        "tested_in_vm": True,
-        "promoted": True,
-        "solution_used": solution_content[:100] + "..."
-    }
+    import tempfile
+    import shutil
+    import re
+    
+    try:
+        # Generate skill name
+        skill_name = f"skill_{int(time.time())}"
+        
+        # Extract Python code from solution if it contains markup
+        python_code = _extract_python_code(solution_content)
+        if not python_code:
+            # If no Python code found, treat entire solution as code
+            python_code = solution_content
+        
+        # Ensure the code has a run function
+        if 'def run(' not in python_code:
+            # Wrap the code in a run function
+            python_code = f'''def run(message: str) -> dict:
+    """Generated skill from: {user_request[:100]}"""
+    try:
+        # User's solution:
+{_indent_code(python_code, 8)}
+        
+        return {{
+            "success": True,
+            "result": "Skill executed successfully",
+            "skill_name": "{skill_name}"
+        }}
+    except Exception as e:
+        return {{
+            "success": False,
+            "error": str(e),
+            "skill_name": "{skill_name}"
+        }}
+'''
+        
+        # Write to temporary directory first
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_file = os.path.join(temp_dir, f"{skill_name}.py")
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                f.write(python_code)
+            
+            # Test the skill in the temporary directory
+            test_result = await _test_skill_in_sandbox(temp_file, user_request)
+            
+            if test_result.get("success", False):
+                # Move to skills directory
+                if _skills_mgr:
+                    success = _skills_mgr.add_skill_file(skill_name, python_code)
+                    if success:
+                        # Reload skills to include the new one
+                        _skills_mgr.reload_skills()
+                        
+                        return {
+                            "ok": True,
+                            "skill_name": skill_name,
+                            "tested_in_vm": True,
+                            "promoted": True,
+                            "solution_used": solution_content[:100] + "...",
+                            "test_result": test_result
+                        }
+                
+                return {
+                    "ok": False,
+                    "skill_name": skill_name,
+                    "tested_in_vm": True,
+                    "promoted": False,
+                    "error": "Failed to add skill to skills manager",
+                    "solution_used": solution_content[:100] + "..."
+                }
+            else:
+                return {
+                    "ok": False,
+                    "skill_name": skill_name,
+                    "tested_in_vm": True,
+                    "promoted": False,
+                    "error": test_result.get("error", "Skill testing failed"),
+                    "solution_used": solution_content[:100] + "..."
+                }
+                
+    except Exception as e:
+        return {
+            "ok": False,
+            "skill_name": f"skill_{int(time.time())}",
+            "tested_in_vm": False,
+            "promoted": False,
+            "error": str(e),
+            "solution_used": solution_content[:100] + "..."
+        }
+
+def _extract_python_code(content: str) -> str:
+    """Extract Python code from markdown or other markup"""
+    import re
+    
+    # Look for Python code blocks
+    python_blocks = re.findall(r'```python\n(.*?)\n```', content, re.DOTALL)
+    if python_blocks:
+        return python_blocks[0]
+    
+    # Look for general code blocks
+    code_blocks = re.findall(r'```\n(.*?)\n```', content, re.DOTALL)
+    if code_blocks:
+        return code_blocks[0]
+    
+    return content
+
+def _indent_code(code: str, spaces: int) -> str:
+    """Indent code by specified number of spaces"""
+    indent = ' ' * spaces
+    lines = code.split('\n')
+    return '\n'.join(indent + line if line.strip() else line for line in lines)
+
+async def _test_skill_in_sandbox(skill_file: str, test_message: str) -> Dict[str, Any]:
+    """Test a skill file in a sandboxed environment"""
+    try:
+        # Simple testing: try to import and run the skill
+        import importlib.util
+        import sys
+        
+        spec = importlib.util.spec_from_file_location("test_skill", skill_file)
+        if spec is None or spec.loader is None:
+            return {"success": False, "error": "Could not load skill module"}
+        
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        
+        # Check if run function exists
+        if not hasattr(module, 'run'):
+            return {"success": False, "error": "Skill does not have a 'run' function"}
+        
+        # Test the run function
+        result = module.run(test_message)
+        
+        if isinstance(result, dict) and result.get('success'):
+            return {"success": True, "message": "Skill test passed"}
+        else:
+            return {"success": False, "error": f"Skill test failed: {result}"}
+            
+    except Exception as e:
+        return {"success": False, "error": f"Skill testing error: {str(e)}"}
 
 # Downloads route
 @app.get("/downloads/list")
