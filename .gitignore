@@ -3,6 +3,27 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Dexter v3 specific ignores
+dexter.db
+*.db
+logs/
+vm_shared/
+.env
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Build outputs
+frontend/dist/
+backend/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 # User-specific files
 *.rsuser
 *.suo

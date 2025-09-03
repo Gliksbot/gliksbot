@@ -1,4 +1,47 @@
+# Dexter v3 Sandbox Environment
+# Secure, isolated environment for testing AI-generated code
+
 FROM python:3.11-slim
-RUN pip install --no-cache-dir pytest
-COPY runner.py /runner.py
+
+# Install system dependencies for secure testing
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    curl \
+    wget \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install common Python packages for testing
+# Use --trusted-host flags to handle potential SSL issues in restricted environments
+RUN pip install --no-cache-dir \
+    --trusted-host pypi.org \
+    --trusted-host pypi.python.org \
+    --trusted-host files.pythonhosted.org \
+    pytest \
+    pytest-timeout \
+    requests \
+    pyyaml || \
+    echo "Warning: Some packages failed to install due to network restrictions"
+
+# Create a non-root user for security
+RUN useradd -m -s /bin/bash sandbox
+USER sandbox
+WORKDIR /home/sandbox
+
+# Copy the runner script
+COPY runner.py /home/sandbox/runner.py
+
+# Create directories for code execution
+RUN mkdir -p /home/sandbox/workspace /home/sandbox/results
+
+# Set environment variables
+ENV PYTHONPATH=/home/sandbox
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Default command
+CMD ["python", "runner.py"]
 

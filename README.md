@@ -2,6 +2,24 @@
 
 GliksBot is a sophisticated AI collaboration platform featuring Dexter, an elite AI orchestrator, leading a team of specialized AI models to accomplish complex tasks and generate income opportunities.
 
+## 🚀 Quick Start Deployment
+
+**Ready to deploy? Use our one-click installers:**
+
+**Linux/macOS:**
+```bash
+chmod +x install.sh && ./install.sh && ./launch.sh
+```
+
+**Windows:**
+```cmd
+install.bat && launch.bat
+```
+
+**Then open:** http://localhost:3000
+
+📚 **For detailed deployment instructions, see [README_DEPLOY.md](README_DEPLOY.md)**
+
 ## 🚀 Recent Major Updates
 
 ### Enhanced Model Configuration System
