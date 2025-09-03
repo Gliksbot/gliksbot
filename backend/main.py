@@ -11,17 +11,17 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # Authentication imports
-from backend.auth import auth_manager, get_current_user
+from auth import auth_manager, get_current_user
 
 # Placeholder imports - you'll replace these with actual implementations
-from backend.dexter_brain.config import Config
-from backend.dexter_brain.campaigns import CampaignManager
-from backend.dexter_brain.collaboration import CollaborationManager
-from backend.dexter_brain.llm import call_slot
+from dexter_brain.config import Config
+from dexter_brain.campaigns import CampaignManager
+from dexter_brain.collaboration import CollaborationManager
+from dexter_brain.llm import call_slot
 # NEW: BrainDB for STM/LTM
-from backend.dexter_brain.db import BrainDB
+from dexter_brain.db import BrainDB
 # NEW: SkillsManager for dynamic skill execution
-from backend.skills import SkillsManager
+from skills.skills_manager import SkillsManager
 
 CONFIG_PATH = os.environ.get("DEXTER_CONFIG_FILE", "/home/runner/work/gliksbot/gliksbot/config.json")
 DOWNLOADS_DIR = os.environ.get("DEXTER_DOWNLOADS_DIR", "/tmp/dexter_downloads")
@@ -54,7 +54,7 @@ except Exception as e:
 app = FastAPI(title="Dexter API v3", version="3.0", docs_url="/docs", redoc_url="/redoc")
 
 # Include API routers
-from backend.dexter_brain import events_api, collaboration_api, skills_api
+from dexter_brain import events_api, collaboration_api, skills_api
 app.include_router(events_api.router)
 app.include_router(collaboration_api.router)
 app.include_router(skills_api.router)
@@ -732,7 +732,7 @@ async def send_input_to_slot(slot: str, message: dict):
             raise HTTPException(400, f"Model {model_name} is not enabled")
         
         # Create a direct chat with the LLM (bypass collaboration for direct user input)
-        from backend.dexter_brain.llm import call_slot
+        from dexter_brain.llm import call_slot
         response = await call_slot(_app_cfg, model_name, user_message)
         
         # Also write this interaction to collaboration files for visibility
