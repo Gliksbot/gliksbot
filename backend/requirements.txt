@@ -17,6 +17,9 @@ cryptography>=41.0.0
 # System monitoring
 psutil>=5.9.0
 
+# Docker for sandbox environment
+docker>=6.1.0
+
 # Optional development dependencies
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
