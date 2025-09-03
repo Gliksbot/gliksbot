@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { api } from '../api'
+import ChatPane from './ChatPane'
 
 // TTS Manager for speech synthesis
 class TTSManager {
@@ -1045,6 +1046,13 @@ export default function ResizableGrid() {
           Events: {events.length} | Active: {activeSlots.size} | 
           Enabled: {Object.values(modelConfigs).filter(c => c?.enabled).length}/{slots.length}
         </div>
+      </div>
+      
+      {/* Unified Chat with Dexter & Team */}
+      <div className="mb-6">
+        <ResizablePane className="w-full min-h-[400px]">
+          <ChatPane />
+        </ResizablePane>
       </div>
       
       {/* Individual LLM Interfaces Grid */}
