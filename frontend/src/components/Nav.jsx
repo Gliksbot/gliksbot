@@ -20,6 +20,7 @@ export default function Nav({ tab, setTab, onShowLogin, onLogout }){
         <div className="text-lg font-semibold mr-4">Dexter v3</div>
         <Tab name="Normal" id="normal" allowed={true} />
         <Tab name="Campaigns" id="campaigns" allowed={!guest} />
+        <Tab name="Skills" id="skills" allowed={!guest} />
         <Tab name="Models" id="models" allowed={!guest} />
         <Tab name="Memory" id="memory" allowed={!guest} />
         <Tab name="Patterns" id="patterns" allowed={!guest} />

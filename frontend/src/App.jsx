@@ -7,6 +7,7 @@ import Patterns from './pages/Patterns.jsx'
 import ConfigPage from './pages/Config.jsx'
 import Downloads from './pages/Downloads.jsx'
 import Campaigns from './pages/Campaigns.jsx'
+import Skills from './pages/Skills.jsx'
 import { api } from './api'
 import { isAuthed, setToken } from './auth'
 
@@ -96,6 +97,7 @@ export default function App(){
       {tab==='downloads' ? <Downloads/> :
        tab==='normal' ? <Normal/> :
        tab==='campaigns' && !guest ? <Campaigns/> :
+       tab==='skills' && !guest ? <Skills/> :
        tab==='models' && !guest ? <Models/> :
        tab==='memory' && !guest ? <Memory/> :
        tab==='patterns' && !guest ? <Patterns/> :

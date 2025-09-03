@@ -9,10 +9,53 @@ export default function ChatPane(){
   const [selectedCampaign, setSelectedCampaign] = React.useState('')
   const [lastExecution, setLastExecution] = React.useState(null)
   const [collaborationSession, setCollaborationSession] = React.useState(null)
+  const [skillsResults, setSkillsResults] = React.useState(null)
+  const [isListening, setIsListening] = React.useState(false)
+  const [speechSettings, setSpeechSettings] = React.useState({
+    enabled: true,
+    listenDuration: 5000, // 5 seconds default
+    continuous: false
+  })
+  const [isMuted, setIsMuted] = React.useState(false)
+  const recognitionRef = React.useRef(null)
   
   React.useEffect(() => {
     loadCampaigns()
+    initializeSpeechRecognition()
   }, [])
+  
+  const initializeSpeechRecognition = () => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      recognitionRef.current = new SpeechRecognition()
+      
+      recognitionRef.current.continuous = speechSettings.continuous
+      recognitionRef.current.interimResults = true
+      recognitionRef.current.lang = 'en-US'
+      
+      recognitionRef.current.onresult = (event) => {
+        let finalTranscript = ''
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript
+          }
+        }
+        
+        if (finalTranscript) {
+          setMsg(prev => prev + ' ' + finalTranscript.trim())
+        }
+      }
+      
+      recognitionRef.current.onerror = (event) => {
+        console.error('Speech recognition error:', event.error)
+        setIsListening(false)
+      }
+      
+      recognitionRef.current.onend = () => {
+        setIsListening(false)
+      }
+    }
+  }
   
   const loadCampaigns = async () => {
     try {
@@ -28,6 +71,7 @@ export default function ChatPane(){
     setBusy(true)
     setLastExecution(null)
     setCollaborationSession(null)
+    setSkillsResults(null)
     
     try{ 
       const payload = { message: msg }
@@ -46,6 +90,10 @@ export default function ChatPane(){
         setCollaborationSession(data.collaboration_session)
       }
       
+      if (data.skills_results) {
+        setSkillsResults(data.skills_results)
+      }
+      
       if (data.campaign_updated) {
         loadCampaigns() // Refresh campaigns if one was updated
       }
@@ -56,6 +104,32 @@ export default function ChatPane(){
     } finally{ 
       setBusy(false) 
     } 
+  }
+  
+  const startListening = () => {
+    if (!speechSettings.enabled || !recognitionRef.current) return
+    
+    setIsListening(true)
+    recognitionRef.current.start()
+    
+    // Auto-stop after configured duration
+    setTimeout(() => {
+      if (recognitionRef.current && isListening) {
+        recognitionRef.current.stop()
+      }
+    }, speechSettings.listenDuration)
+  }
+  
+  const stopListening = () => {
+    if (recognitionRef.current && isListening) {
+      recognitionRef.current.stop()
+    }
+    setIsListening(false)
+  }
+  
+  const toggleMute = () => {
+    setIsMuted(!isMuted)
+    // TODO: Implement actual TTS muting functionality
   }
   
   return (
@@ -119,6 +193,71 @@ export default function ChatPane(){
             </div>
           </div>
         )}
+        
+        {/* Skills Results */}
+        {skillsResults && skillsResults.length > 0 && (
+          <div className="bg-slate-900 border border-slate-800 rounded p-2">
+            <div className="text-xs text-slate-400 mb-1">Skills Executed:</div>
+            <div className="space-y-1">
+              {skillsResults.map((result, index) => (
+                <div key={index} className="text-xs">
+                  <div className={`flex items-center gap-2 ${result.success ? 'text-green-400' : 'text-red-400'}`}>
+                    <span>{result.success ? '✓' : '✗'}</span>
+                    <span className="font-medium">{result.skill_name}</span>
+                  </div>
+                  {result.result && (
+                    <div className="text-slate-300 ml-4 mt-1">{result.result}</div>
+                  )}
+                  {result.error && (
+                    <div className="text-red-300 ml-4 mt-1">{result.error}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Speech Settings Panel */}
+      <div className="p-2 border-t border-slate-800 bg-slate-900/20">
+        <div className="flex items-center gap-4 text-xs">
+          <label className="flex items-center gap-1">
+            <input 
+              type="checkbox" 
+              checked={speechSettings.enabled}
+              onChange={(e) => setSpeechSettings(prev => ({...prev, enabled: e.target.checked}))}
+              className="w-3 h-3"
+            />
+            <span className="text-slate-300">Speech Input</span>
+          </label>
+          
+          <label className="flex items-center gap-1">
+            <span className="text-slate-400">Duration:</span>
+            <select 
+              value={speechSettings.listenDuration}
+              onChange={(e) => setSpeechSettings(prev => ({...prev, listenDuration: parseInt(e.target.value)}))}
+              className="bg-slate-800 border border-slate-700 rounded px-1 py-0 text-xs"
+              disabled={!speechSettings.enabled}
+            >
+              <option value={3000}>3s</option>
+              <option value={5000}>5s</option>
+              <option value={10000}>10s</option>
+              <option value={15000}>15s</option>
+              <option value={30000}>30s</option>
+            </select>
+          </label>
+          
+          <button 
+            onClick={toggleMute}
+            className={`px-2 py-1 rounded text-xs ${
+              isMuted 
+                ? 'bg-red-600 hover:bg-red-500 text-white' 
+                : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+            }`}
+          >
+            {isMuted ? '🔇 Muted' : '🔊 Audio'}
+          </button>
+        </div>
       </div>
       
       {/* Input */}
@@ -131,6 +270,22 @@ export default function ChatPane(){
           onKeyDown={e=>e.key==='Enter'&&send()} 
           disabled={busy}
         />
+        
+        {/* Microphone Button */}
+        {speechSettings.enabled && (
+          <button 
+            onClick={isListening ? stopListening : startListening}
+            disabled={busy}
+            className={`px-3 py-2 rounded text-sm ${
+              isListening 
+                ? 'bg-red-600 hover:bg-red-500 text-white' 
+                : 'bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white'
+            }`}
+          >
+            {isListening ? '🎤 Stop' : '🎤'}
+          </button>
+        )}
+        
         <button 
           onClick={send} 
           disabled={busy || !msg.trim()} 
