@@ -1,0 +1,7 @@
+{
+  "timestamp": 1756928960.278719,
+  "llm": "researcher",
+  "phase": "error",
+  "session": "5a5683d6-4d22-4c5d-a6e2-de270765725b",
+  "content": "OpenAI API key not configured"
+}

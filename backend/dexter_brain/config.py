@@ -28,7 +28,19 @@ class Config:
         rt.setdefault('stm_max_bytes', 0)
         rt.setdefault('stm_min_free_bytes', 268_435_456)  # 256MB
         sb = rt.setdefault('sandbox', {})
-        sb.setdefault('provider', 'hyperv')
+        sb.setdefault('provider', 'docker')  # Default to Docker instead of Hyper-V
+        sb.setdefault('host_shared_dir', './vm_shared')
+        sb.setdefault('container_shared_dir', '/sandbox/shared')
+        
+        # Docker configuration
+        docker_config = sb.setdefault('docker', {})
+        docker_config.setdefault('image', 'python:3.11-slim')
+        docker_config.setdefault('memory_limit', '256m')
+        docker_config.setdefault('cpu_limit', 0.5)
+        docker_config.setdefault('timeout_sec', 60)
+        docker_config.setdefault('network_mode', 'none')
+        
+        # Hyper-V configuration (for backward compatibility)
         hv = sb.setdefault('hyperv', {})
         hv.setdefault('vm_name', 'DexterVM')
         hv.setdefault('vm_user', 'Administrator')

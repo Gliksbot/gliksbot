@@ -6,7 +6,16 @@
     "stm_max_bytes": 0,
     "stm_min_free_bytes": 268435456,
     "sandbox": {
-      "provider": "hyperv",
+      "provider": "docker",
+      "host_shared_dir": "./vm_shared",
+      "container_shared_dir": "/sandbox/shared",
+      "docker": {
+        "image": "python:3.11-slim",
+        "memory_limit": "256m",
+        "cpu_limit": 0.5,
+        "timeout_sec": 60,
+        "network_mode": "none"
+      },
       "hyperv": {
         "vm_name": "sandbox",
         "vm_user": "Administrator",
