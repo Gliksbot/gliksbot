@@ -4,10 +4,11 @@ import json
 import asyncio
 import uuid
 import time
+import traceback
 from typing import Any, Dict, List, Optional
-from fastapi import FastAPI, Depends, HTTPException, Header, Query
+from fastapi import FastAPI, Depends, HTTPException, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 # Authentication imports
@@ -22,6 +23,10 @@ from dexter_brain.llm import call_slot
 from dexter_brain.db import BrainDB
 # NEW: SkillsManager for dynamic skill execution
 from skills.skills_manager import SkillsManager
+# NEW: Error tracking and healing
+from dexter_brain.error_tracker import ErrorTracker, ErrorSeverity
+from dexter_brain.error_healer import ErrorHealer
+from dexter_brain.enhanced_skills import create_and_test_skill_with_healing, get_sandbox_health_status
 
 CONFIG_PATH = os.environ.get("DEXTER_CONFIG_FILE", "/home/runner/work/gliksbot/gliksbot/config.json")
 DOWNLOADS_DIR = os.environ.get("DEXTER_DOWNLOADS_DIR", "/tmp/dexter_downloads")
@@ -51,7 +56,77 @@ except Exception as e:
     print(f"Warning: Failed to initialize SkillsManager: {e}")
     _skills_mgr = None
 
+# NEW: Initialize error tracking and healing system
+_error_tracker = ErrorTracker(max_errors=1000, persist_path="./logs/errors.jsonl")
+_error_healer: Optional[ErrorHealer] = None
+
 app = FastAPI(title="Dexter API v3", version="3.0", docs_url="/docs", redoc_url="/redoc")
+
+# NEW: Global exception handler for error tracking
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler that logs errors for healing."""
+    error_id = _error_tracker.log_error(
+        error_type=type(exc).__name__,
+        message=str(exc),
+        severity=ErrorSeverity.HIGH,
+        source="api",
+        context={
+            "endpoint": str(request.url),
+            "method": request.method,
+            "headers": dict(request.headers),
+            "user_agent": request.headers.get("user-agent", "unknown")
+        },
+        stack_trace=traceback.format_exc()
+    )
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error", 
+            "error_id": error_id,
+            "message": "Error has been logged and will be analyzed by the healing system"
+        }
+    )
+
+# NEW: Startup event to initialize error healer
+startup_time = time.time()
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize error healing system when the application starts."""
+    global _error_healer
+    try:
+        # Initialize error healer
+        _error_healer = ErrorHealer(_app_cfg, _error_tracker, _collab_mgr)
+        
+        # Start error monitoring task
+        asyncio.create_task(_error_healer.start_error_monitoring())
+        
+        print("✅ Error tracking and healing system initialized")
+        
+        # Log successful startup
+        _error_tracker.log_error(
+            "SYSTEM_STARTUP",
+            "Dexter v3 system started successfully with Docker sandbox and error healing",
+            ErrorSeverity.LOW,
+            "system",
+            {
+                "sandbox_provider": _app_cfg.runtime.get('sandbox', {}).get('provider', 'unknown'),
+                "error_tracking_enabled": True,
+                "error_healing_enabled": True
+            },
+            auto_capture_traceback=False
+        )
+        
+    except Exception as e:
+        print(f"❌ Failed to initialize error healer: {e}")
+        _error_tracker.log_error(
+            "STARTUP_ERROR",
+            f"Failed to initialize error healer: {e}",
+            ErrorSeverity.CRITICAL,
+            "system"
+        )
 
 # Include API routers
 from dexter_brain import events_api, collaboration_api, skills_api
@@ -110,10 +185,107 @@ class ChatOut(BaseModel):
 class ConfigOut(BaseModel):
     config: Dict[str, Any]
 
-# Basic routes
+# Enhanced health endpoint with sandbox status
 @app.get("/health", response_model=HealthOut)
 def health():
     return HealthOut()
+
+# NEW: Detailed system health endpoint
+@app.get("/health/detailed")
+def detailed_health(current_user: dict = Depends(get_current_user)):
+    """Get detailed system health including sandbox and error tracking status."""
+    
+    # Get sandbox health
+    sandbox_health = get_sandbox_health_status(_app_cfg.to_json())
+    
+    # Get error statistics
+    error_stats = _error_tracker.get_error_statistics()
+    
+    # Get healing statistics
+    healing_stats = {}
+    if _error_healer:
+        healing_stats = _error_healer.get_healing_statistics()
+    
+    return {
+        "system": {
+            "status": "healthy",
+            "version": "3.0",
+            "uptime_seconds": time.time() - startup_time if 'startup_time' in globals() else 0
+        },
+        "sandbox": sandbox_health,
+        "error_tracking": {
+            "enabled": True,
+            "stats": error_stats
+        },
+        "error_healing": {
+            "enabled": _error_healer is not None,
+            "stats": healing_stats
+        },
+        "collaboration": {
+            "active_sessions": len(_collab_mgr.get_active_sessions())
+        }
+    }
+
+# NEW: Error tracking endpoints
+@app.get("/errors/recent")
+def get_recent_errors(
+    minutes: int = Query(60, description="Get errors from last N minutes"),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get recent system errors."""
+    errors = _error_tracker.get_recent_errors(minutes)
+    return {
+        "errors": [error.to_dict() for error in errors],
+        "count": len(errors),
+        "time_range_minutes": minutes
+    }
+
+@app.get("/errors/statistics")
+def get_error_statistics(current_user: dict = Depends(get_current_user)):
+    """Get error statistics and trends."""
+    return _error_tracker.get_error_statistics()
+
+@app.post("/errors/{error_id}/resolve")
+def mark_error_resolved(
+    error_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Manually mark an error as resolved."""
+    success = _error_tracker.mark_resolved(error_id)
+    if success:
+        return {"message": f"Error {error_id} marked as resolved"}
+    else:
+        raise HTTPException(status_code=404, detail="Error not found")
+
+# NEW: Sandbox testing endpoint
+@app.post("/sandbox/test")
+async def test_sandbox(
+    test_code: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Test code execution in the sandbox."""
+    try:
+        from dexter_brain.sandbox import create_sandbox
+        
+        sandbox = create_sandbox(_app_cfg.to_json())
+        result = await sandbox.execute_skill(test_code)
+        
+        return {
+            "success": result.get('success', False),
+            "output": result.get('output', ''),
+            "execution_time": result.get('execution_time', 0),
+            "sandbox_type": result.get('sandbox_type', 'unknown')
+        }
+        
+    except Exception as e:
+        _error_tracker.log_error(
+            "SANDBOX_TEST_FAILED",
+            str(e),
+            ErrorSeverity.MEDIUM,
+            "api",
+            {"test_code": test_code[:200]}
+        )
+        raise HTTPException(status_code=500, detail=f"Sandbox test failed: {e}")
 
 # Authentication routes
 @app.post("/auth/login", response_model=LoginResponse)

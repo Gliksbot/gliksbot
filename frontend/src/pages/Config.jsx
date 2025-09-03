@@ -90,7 +90,7 @@ export default function ConfigPage() {
 
           {/* Quick Config Summary */}
           {config && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="border border-slate-700 rounded-lg p-4 bg-slate-900/40">
                 <h3 className="font-medium mb-3">Models</h3>
                 <div className="space-y-2">
@@ -126,10 +126,51 @@ export default function ConfigPage() {
                       {config.campaigns?.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </div>
+                </div>
+              </div>
+
+              <div className="border border-slate-700 rounded-lg p-4 bg-slate-900/40">
+                <h3 className="font-medium mb-3">Sandbox & Security</h3>
+                <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span>VM Provider:</span>
-                    <span className="text-slate-400">{config.runtime?.sandbox?.provider || 'None'}</span>
+                    <span>Provider:</span>
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      config.runtime?.sandbox?.provider === 'docker' ? 'bg-blue-600' : 
+                      config.runtime?.sandbox?.provider === 'hyperv' ? 'bg-purple-600' : 'bg-gray-600'
+                    }`}>
+                      {config.runtime?.sandbox?.provider || 'None'}
+                    </span>
                   </div>
+                  {config.runtime?.sandbox?.provider === 'docker' && (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Docker Image:</span>
+                        <span className="text-slate-400 text-xs">
+                          {config.runtime?.sandbox?.docker?.image || 'python:3.11-slim'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Memory Limit:</span>
+                        <span className="text-slate-400">
+                          {config.runtime?.sandbox?.docker?.memory_limit || '256m'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Network:</span>
+                        <span className="text-slate-400">
+                          {config.runtime?.sandbox?.docker?.network_mode || 'none'}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {config.runtime?.sandbox?.provider === 'hyperv' && (
+                    <div className="flex justify-between">
+                      <span>VM Name:</span>
+                      <span className="text-slate-400">
+                        {config.runtime?.sandbox?.hyperv?.vm_name || 'DexterVM'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -140,7 +181,8 @@ export default function ConfigPage() {
             <h3 className="font-medium mb-3">Configuration Help</h3>
             <div className="text-sm text-slate-400 space-y-2">
               <p>• <strong>models</strong>: Configure LLM providers and their settings</p>
-              <p>• <strong>runtime</strong>: Database, memory, and sandbox configuration</p>
+              <p>• <strong>runtime.sandbox.provider</strong>: Choose 'docker' (recommended) or 'hyperv' for code execution</p>
+              <p>• <strong>runtime.sandbox.docker</strong>: Configure Docker container settings for secure code execution</p>
               <p>• <strong>campaigns</strong>: Enable/disable campaign mode and set limits</p>
               <p>• <strong>voting</strong>: Set voting weights for LLM collaboration</p>
               <p>• <strong>domain</strong>: Configure domain settings and CORS</p>
