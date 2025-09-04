@@ -45,8 +45,8 @@ class Config:
         hv.setdefault('vm_name', 'DexterVM')
         hv.setdefault('vm_user', 'Administrator')
         hv.setdefault('vm_password_env', 'DEXTER_VM_PASSWORD')
-        hv.setdefault('host_shared_dir', 'm:/gliksbot/vm_shared')
-        hv.setdefault('vm_shared_dir', 'C:/HostShare')
+        hv.setdefault('host_shared_dir', './vm_shared')
+        hv.setdefault('vm_shared_dir', '/sandbox/shared')
         hv.setdefault('python_exe', 'python')
         hv.setdefault('timeout_sec', 60)
         
