@@ -11,6 +11,16 @@ export default defineConfig({
         changeOrigin: true, 
         rewrite: p => p.replace(/^\/api/, '') 
       } 
-    } 
+    },
+    watch: {
+      // Ignore collaboration files to prevent hot reload cycles
+      ignored: [
+        '**/collaboration/**',
+        '**/*.jsonl',
+        '**/backend/collaboration/**',
+        '**/vm_shared/**',
+        '**/logs/**'
+      ]
+    }
   }
 })

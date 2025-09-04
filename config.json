@@ -221,7 +221,7 @@
   "collaboration": {
     "enabled": true,
     "base_directory": "./collaboration",
-    "file_sync_interval": 5,
+    "file_sync_interval": 15,
     "max_file_size": 1048576,
     "allowed_extensions": [
       ".txt",
@@ -229,7 +229,7 @@
       ".json",
       ".log"
     ],
-    "watch_enabled": true,
+    "watch_enabled": false,
     "cross_communication": true
   },
   "campaigns": {
