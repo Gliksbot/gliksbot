@@ -181,7 +181,19 @@ function CollabPane({ slotName }) {
 function LLMInterface({ slotName, events, isActive, config, onConfigUpdate }) {
   const [activeTab, setActiveTab] = useState('chat') // 'chat', 'config', 'monitor', 'tts'
   const [isMinimized, setIsMinimized] = useState(false)
-  const [chatHistory, setChatHistory] = useState([])
+  
+  // Load chat history from localStorage
+  const loadChatHistory = () => {
+    try {
+      const savedHistory = localStorage.getItem(`dexter_chat_${slotName}`)
+      return savedHistory ? JSON.parse(savedHistory) : []
+    } catch (e) {
+      console.warn(`Failed to load chat history for ${slotName}:`, e)
+      return []
+    }
+  }
+  
+  const [chatHistory, setChatHistory] = useState(loadChatHistory)
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [ttsSettings, setTtsSettings] = useState({
@@ -203,6 +215,15 @@ function LLMInterface({ slotName, events, isActive, config, onConfigUpdate }) {
     identity: '',
     role: ''
   })
+
+  // Save chat history to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(`dexter_chat_${slotName}`, JSON.stringify(chatHistory))
+    } catch (e) {
+      console.warn(`Failed to save chat history for ${slotName}:`, e)
+    }
+  }, [chatHistory, slotName])
 
   // Update local config when prop changes and sync to backend
   useEffect(() => {
@@ -876,12 +897,34 @@ function ResizablePane({ children, className = "", style = {} }) {
 
 // Main LLM management grid
 export default function ResizableGrid() {
-  const [events, setEvents] = useState([])
+  // Load events from localStorage on startup
+  const loadEventsFromStorage = () => {
+    try {
+      const savedEvents = localStorage.getItem('dexter_events')
+      return savedEvents ? JSON.parse(savedEvents) : []
+    } catch (e) {
+      console.warn('Failed to load events from localStorage:', e)
+      return []
+    }
+  }
+  
+  const [events, setEvents] = useState(loadEventsFromStorage)
   const [paused, setPaused] = useState(false)
   const [activeSlots, setActiveSlots] = useState(new Set())
   const [modelConfigs, setModelConfigs] = useState({})
   const [loading, setLoading] = useState(true)
   const [configVersion, setConfigVersion] = useState(0) // Force re-renders on config changes
+  
+  // Save events to localStorage whenever they change (prevent data loss on reload)
+  useEffect(() => {
+    try {
+      // Keep only the last 1000 events to prevent localStorage bloat
+      const eventsToSave = events.slice(-1000)
+      localStorage.setItem('dexter_events', JSON.stringify(eventsToSave))
+    } catch (e) {
+      console.warn('Failed to save events to localStorage:', e)
+    }
+  }, [events])
   
   // Known LLM slots - using actual model names from config
   const slots = ['dexter', 'analyst', 'engineer', 'researcher', 'creative', 'specialist1', 'specialist2', 'rye']
@@ -931,30 +974,63 @@ export default function ResizableGrid() {
     return () => clearInterval(interval)
   }, [])
 
-  // Handle events stream
+  // Handle events stream with reconnection logic
   useEffect(() => {
-    const es = new EventSource('/events')
+    let es = null
+    let reconnectAttempts = 0
+    const maxReconnectAttempts = 5
+    const baseReconnectDelay = 1000 // 1 second
     
-    es.onmessage = (m) => {
-      if (paused) return
-      try {
-        const event = JSON.parse(m.data)
-        setEvents(prev => [...prev.slice(-999), event])
-        
-        // Track active slots
-        if (event.slot) {
-          setActiveSlots(prev => new Set([...prev, event.slot]))
+    const connectSSE = () => {
+      console.log('🔌 Connecting to SSE...')
+      es = new EventSource('/events')
+      
+      es.onopen = () => {
+        console.log('✅ SSE connected')
+        reconnectAttempts = 0 // Reset on successful connection
+      }
+      
+      es.onmessage = (m) => {
+        if (paused) return
+        try {
+          const event = JSON.parse(m.data)
+          setEvents(prev => [...prev.slice(-999), event])
+          
+          // Track active slots
+          if (event.slot) {
+            setActiveSlots(prev => new Set([...prev, event.slot]))
+          }
+        } catch (e) {
+          console.error('Failed to parse event:', e)
         }
-      } catch (e) {
-        console.error('Failed to parse event:', e)
+      }
+      
+      es.onerror = (e) => {
+        console.error('❌ SSE error:', e)
+        es.close()
+        
+        // Implement exponential backoff for reconnection
+        if (reconnectAttempts < maxReconnectAttempts) {
+          const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts)
+          console.log(`🔄 Reconnecting SSE in ${delay}ms (attempt ${reconnectAttempts + 1}/${maxReconnectAttempts})`)
+          
+          setTimeout(() => {
+            reconnectAttempts++
+            connectSSE()
+          }, delay)
+        } else {
+          console.error('🚫 Max SSE reconnection attempts reached. Manual refresh may be needed.')
+        }
       }
     }
     
-    es.onerror = (e) => {
-      console.error('SSE error:', e)
-    }
+    connectSSE()
     
-    return () => es.close()
+    return () => {
+      if (es) {
+        es.close()
+      }
+    }
   }, [paused])
 
   // Handle configuration updates with immediate backend sync
@@ -986,8 +1062,27 @@ export default function ResizableGrid() {
 
   // Clear all chats
   const clearAllChats = () => {
-    // This would need to be implemented to clear chat histories
-    window.location.reload() // Simple solution for now
+    // Clear localStorage for all chat histories and events
+    try {
+      const keysToRemove = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && (key.startsWith('dexter_chat_') || key === 'dexter_events')) {
+          keysToRemove.push(key)
+        }
+      }
+      
+      keysToRemove.forEach(key => localStorage.removeItem(key))
+      console.log('🗑️ Cleared chat histories and events from localStorage')
+      
+      // Reset events state
+      setEvents([])
+      
+      // Note: Individual chat histories will be cleared on next render due to localStorage clearing
+      
+    } catch (e) {
+      console.warn('Failed to clear chat data:', e)
+    }
   }
 
   if (loading) {
