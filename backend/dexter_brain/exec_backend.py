@@ -60,7 +60,7 @@ class DockerBackend(ExecBackend):
 
 class HyperVBackend(ExecBackend):
     name = "hyperv"
-    def __init__(self, vm_name: str, host_shared_dir: Path | None = None, vm_shared_dir: str = 'C:/HostShare', python_exe: str = 'python', vm_user: str | None = None, vm_password_env: str | None = None):
+    def __init__(self, vm_name: str, host_shared_dir: Path | None = None, vm_shared_dir: str = '/sandbox/shared', python_exe: str = 'python', vm_user: str | None = None, vm_password_env: str | None = None):
         self.vm_name = vm_name
         self.host_shared_dir = Path(host_shared_dir) if host_shared_dir else None
         self.vm_shared_dir = vm_shared_dir.rstrip('\\/')
@@ -137,7 +137,7 @@ def choose_backend(cfg: dict) -> ExecBackend:
         if not vm:
             raise RuntimeError('Hyper-V backend configured without vm_name')
         host_shared_dir = hv.get('host_shared_dir')
-        vm_shared_dir = hv.get('vm_shared_dir','C:/HostShare')
+        vm_shared_dir = hv.get('vm_shared_dir','/sandbox/shared')
         python_exe = hv.get('python_exe','python')
         vm_user = hv.get('vm_user')
         vm_password_env = hv.get('vm_password_env')

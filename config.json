@@ -17,11 +17,11 @@
         "network_mode": "none"
       },
       "hyperv": {
-        "vm_name": "sandbox",
+        "vm_name": "DexterVM",
         "vm_user": "Administrator",
         "vm_password_env": "DEXTER_VM_PASSWORD",
-        "host_shared_dir": "m:/gliksbot/vm_shared",
-        "vm_shared_dir": "C:/HostShare",
+        "host_shared_dir": "./vm_shared",
+        "vm_shared_dir": "/sandbox/shared",
         "python_exe": "python",
         "timeout_sec": 120
       }

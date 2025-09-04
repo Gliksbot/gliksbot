@@ -10,6 +10,10 @@ echo ============================================
 echo Installing dependencies and setting up environment...
 echo.
 
+REM Get current directory for cross-platform compatibility
+set "INSTALL_DIR=%~dp0"
+echo [INFO] Installation directory: %INSTALL_DIR%
+
 REM Check if Python is installed
 python --version >nul 2>&1
 if errorlevel 1 (
@@ -76,11 +80,12 @@ if not defined NODE_MISSING (
 REM Check and setup sandbox providers (Hyper-V and Docker)
 echo [INFO] Setting up sandbox providers...
 
-REM Check for Hyper-V capabilities
+REM Check for Hyper-V capabilities (Windows only - gracefully fails on other platforms)
+echo [INFO] Checking for Hyper-V support (Windows only)...
 powershell -Command "Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -ErrorAction SilentlyContinue" >nul 2>&1
 if errorlevel 1 (
-    echo [INFO] Hyper-V not detected - setting up alternatives...
-    echo [WARNING] ⚠️  IMPORTANT: If Hyper-V fails, Docker will be used as sandbox
+    echo [INFO] Hyper-V not available - will use Docker as primary sandbox
+    echo [INFO] This is normal on non-Windows systems or Windows Home edition
     echo [INFO] To enable Hyper-V on Windows Pro/Enterprise, run as Administrator:
     echo [INFO]   dism /online /enable-feature /featurename:Microsoft-Hyper-V /all /norestart
     echo [INFO]   dism /online /enable-feature /featurename:HypervisorPlatform /all /norestart
@@ -90,6 +95,7 @@ if errorlevel 1 (
     powershell -Command "Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Tools-All -All -NoRestart" >nul 2>&1
     if errorlevel 1 (
         echo [WARNING] Failed to install Hyper-V Manager - install manually if needed
+        echo [INFO] Docker will be used as fallback sandbox
     ) else (
         echo [SUCCESS] Hyper-V Manager tools installed
     )
@@ -98,9 +104,37 @@ if errorlevel 1 (
 REM Check Docker installation for sandbox fallback
 docker --version >nul 2>&1
 if errorlevel 1 (
-    echo [WARNING] Docker not found - sandbox mode will be limited
-    echo [WARNING] Install Docker Desktop for full sandbox capabilities
-    echo [INFO] 📋 SANDBOX FALLBACK CHAIN: Hyper-V → Docker → Limited Mode
+    echo [INFO] Docker not found - attempting to install Docker Desktop...
+    echo [INFO] Checking if we can download Docker Desktop...
+    
+    REM Try to download Docker Desktop installer
+    powershell -Command "try { Invoke-WebRequest -Uri 'https://desktop.docker.com/win/main/amd64/Docker%%20Desktop%%20Installer.exe' -OutFile 'DockerDesktopInstaller.exe' -UseBasicParsing -TimeoutSec 30; exit 0 } catch { exit 1 }" >nul 2>&1
+    
+    if errorlevel 1 (
+        echo [WARNING] Could not download Docker Desktop - network may be restricted
+        echo [WARNING] Docker not found - sandbox mode will be limited
+        echo [INFO] Please install Docker Desktop manually from https://docker.com/products/docker-desktop
+        echo [INFO] 📋 SANDBOX FALLBACK CHAIN: Hyper-V → Docker → Limited Mode
+    ) else (
+        echo [INFO] Docker Desktop downloaded successfully
+        echo [INFO] Installing Docker Desktop (this may take several minutes)...
+        echo [WARNING] Docker Desktop installation requires restart - please reboot after installation
+        
+        REM Install Docker Desktop silently
+        DockerDesktopInstaller.exe install --quiet --accept-license >nul 2>&1
+        
+        if errorlevel 1 (
+            echo [WARNING] Docker Desktop installation failed - trying manual installation
+            echo [INFO] Please run: DockerDesktopInstaller.exe
+            echo [INFO] Or install manually from https://docker.com/products/docker-desktop
+        ) else (
+            echo [SUCCESS] Docker Desktop installed successfully
+            echo [INFO] Please restart your computer to complete Docker setup
+        )
+        
+        REM Clean up installer
+        if exist DockerDesktopInstaller.exe del DockerDesktopInstaller.exe >nul 2>&1
+    )
 ) else (
     echo [INFO] Docker found - sandbox mode available
     echo [INFO] Building Docker sandbox image...
@@ -128,10 +162,11 @@ if not exist .env (
 echo.
 echo [SUCCESS] 🎉 Installation completed successfully!
 echo.
-echo 📋 SANDBOX CONFIGURATION:
-echo • If Hyper-V fails or is unavailable, Docker will be used as fallback
-echo • For full sandbox capabilities, ensure either Hyper-V or Docker is working
-echo • System will run in limited mode if neither is available
+echo 📋 CROSS-PLATFORM SANDBOX CONFIGURATION:
+echo • Docker: Automatically installed or detected for sandbox execution
+echo • Hyper-V: Available on Windows Pro/Enterprise (gracefully fails on other platforms)
+echo • Fallback: Limited mode if neither Docker nor Hyper-V is available
+echo • All paths are now relative and cross-platform compatible
 echo.
 echo Next steps:
 echo 1. Edit .env file with your API keys (optional)
@@ -139,6 +174,7 @@ echo 2. Run 'launch.bat' to start the system
 echo 3. Open http://localhost:3000 for the web interface
 echo 4. Backend API will be available at http://localhost:8000
 echo.
-echo For testing without dependencies, run: python demo_system.py
+echo 💡 For testing without dependencies: python demo_system.py
+echo 🔄 If Docker was installed, restart may be required for full functionality
 echo.
 pause
