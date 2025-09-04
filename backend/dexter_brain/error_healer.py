@@ -48,7 +48,7 @@ class ErrorHealer:
         """Check for errors and trigger healing if needed."""
         # Get recent critical and high severity errors
         critical_errors = self.error_tracker.get_critical_errors()
-        recent_errors = self.error_tracker.get_recent_errors(minutes=2)
+        recent_errors = self.error_tracker.get_recent_errors(since_minutes=2)
         
         # Filter errors that need healing
         errors_to_heal = []
