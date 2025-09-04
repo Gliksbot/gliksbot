@@ -14,6 +14,15 @@ REM Get current directory for cross-platform compatibility
 set "INSTALL_DIR=%~dp0"
 echo [INFO] Installation directory: %INSTALL_DIR%
 
+REM Detect Windows version for better compatibility messaging
+ver | findstr /i "Windows" >nul
+if errorlevel 1 (
+    echo [WARNING] This script is designed for Windows systems
+    echo [INFO] For Linux/macOS, please use install.sh instead
+) else (
+    echo [INFO] Windows system detected - proceeding with Windows-specific setup
+)
+
 REM Check if Python is installed
 python --version >nul 2>&1
 if errorlevel 1 (
@@ -102,53 +111,64 @@ if errorlevel 1 (
 )
 
 REM Check Docker installation for sandbox fallback
+echo [INFO] Checking Docker installation...
 docker --version >nul 2>&1
 if errorlevel 1 (
     echo [INFO] Docker not found - attempting to install Docker Desktop...
-    echo [INFO] Checking if we can download Docker Desktop...
+    echo [INFO] Downloading Docker Desktop installer...
     
-    REM Try to download Docker Desktop installer
-    powershell -Command "try { Invoke-WebRequest -Uri 'https://desktop.docker.com/win/main/amd64/Docker%%20Desktop%%20Installer.exe' -OutFile 'DockerDesktopInstaller.exe' -UseBasicParsing -TimeoutSec 30; exit 0 } catch { exit 1 }" >nul 2>&1
+    REM Try to download Docker Desktop installer with better error handling
+    powershell -Command "try { $ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri 'https://desktop.docker.com/win/main/amd64/Docker%%20Desktop%%20Installer.exe' -OutFile 'DockerDesktopInstaller.exe' -UseBasicParsing -TimeoutSec 60; Write-Host 'Download completed'; exit 0 } catch { Write-Host \"Download failed: $_\"; exit 1 }" 2>nul
     
     if errorlevel 1 (
-        echo [WARNING] Could not download Docker Desktop - network may be restricted
-        echo [WARNING] Docker not found - sandbox mode will be limited
-        echo [INFO] Please install Docker Desktop manually from https://docker.com/products/docker-desktop
-        echo [INFO] 📋 SANDBOX FALLBACK CHAIN: Hyper-V → Docker → Limited Mode
+        echo [WARNING] Could not download Docker Desktop automatically
+        echo [WARNING] This may be due to network restrictions or firewall settings
+        echo [INFO] Please install Docker Desktop manually:
+        echo [INFO]   1. Visit https://docker.com/products/docker-desktop
+        echo [INFO]   2. Download Docker Desktop for Windows
+        echo [INFO]   3. Run the installer and restart your computer
+        echo [INFO] 📋 SANDBOX FALLBACK: Hyper-V → Docker → Limited Mode
     ) else (
-        echo [INFO] Docker Desktop downloaded successfully
-        echo [INFO] Installing Docker Desktop (this may take several minutes)...
-        echo [WARNING] Docker Desktop installation requires restart - please reboot after installation
+        echo [SUCCESS] Docker Desktop installer downloaded
+        echo [INFO] Starting Docker Desktop installation...
+        echo [WARNING] ⚠️  Installation may require administrator privileges
+        echo [WARNING] ⚠️  A system restart will be required after installation
         
-        REM Install Docker Desktop silently
-        DockerDesktopInstaller.exe install --quiet --accept-license >nul 2>&1
+        REM Install Docker Desktop with user interaction for admin privileges if needed
+        start /wait DockerDesktopInstaller.exe install --quiet --accept-license
         
         if errorlevel 1 (
-            echo [WARNING] Docker Desktop installation failed - trying manual installation
-            echo [INFO] Please run: DockerDesktopInstaller.exe
-            echo [INFO] Or install manually from https://docker.com/products/docker-desktop
+            echo [WARNING] Automated installation may have failed
+            echo [INFO] Please run the installer manually: DockerDesktopInstaller.exe
+            echo [INFO] Or download from: https://docker.com/products/docker-desktop
         ) else (
-            echo [SUCCESS] Docker Desktop installed successfully
+            echo [SUCCESS] Docker Desktop installation initiated
             echo [INFO] Please restart your computer to complete Docker setup
+            echo [INFO] After restart, Docker will be available for sandbox execution
         )
         
-        REM Clean up installer
-        if exist DockerDesktopInstaller.exe del DockerDesktopInstaller.exe >nul 2>&1
+        REM Clean up installer (keep it if installation failed for manual retry)
+        if exist DockerDesktopInstaller.exe (
+            echo [INFO] Installer kept for potential manual installation
+        )
     )
 ) else (
-    echo [INFO] Docker found - sandbox mode available
+    echo [SUCCESS] Docker found - testing sandbox capabilities...
     echo [INFO] Building Docker sandbox image...
-    docker build -f Dockerfile.sandbox -t dexter-sandbox .
+    docker build -f Dockerfile.sandbox -t dexter-sandbox . >nul 2>&1
     if errorlevel 1 (
-        echo [WARNING] Failed to build Docker sandbox
+        echo [WARNING] Failed to build Docker sandbox image
+        echo [INFO] You may need to restart Docker or check Docker daemon status
     ) else (
-        echo [SUCCESS] Docker sandbox ready
+        echo [SUCCESS] Docker sandbox ready for secure code execution
     )
 )
 
-REM Create logs directory
+REM Create necessary directories
 if not exist logs mkdir logs
-echo [INFO] Created logs directory
+if not exist vm_shared mkdir vm_shared
+if not exist collaboration mkdir collaboration
+echo [INFO] Created required directories
 
 REM Set up configuration
 if not exist .env (
