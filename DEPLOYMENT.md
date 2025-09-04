@@ -25,15 +25,16 @@ This guide covers the complete deployment of Dexter v3 on Windows Server 2022 wi
 # Run as Administrator
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine -Force
 
-# Clone or copy Dexter v3 to M:\gliksbot
-# Ensure all files are present in m:\gliksbot\
+# Clone or copy Dexter v3 to your desired location
+# Ensure all files are present in the project directory
 ```
 
 ### 2. Configure Environment Variables
 
 Copy and edit the environment template:
 ```powershell
-cp m:\gliksbot\.env.template m:\gliksbot\.env.production
+cd path\to\gliksbot
+cp .env.template .env.production
 ```
 
 Update the following variables in `.env.production`:
@@ -49,7 +50,7 @@ Update the following variables in `.env.production`:
 
 Execute the main setup script:
 ```powershell
-cd m:\gliksbot
+cd path\to\gliksbot
 .\production_setup.ps1 -DomainName "www.gliksbot.com" -VMPassword "YourSecureVMPassword"
 ```
 
@@ -85,7 +86,7 @@ Create the DexterVM manually:
 5. Configure Administrator password
 6. Enable PowerShell Direct
 7. Create shared folder mapping:
-   - Host: `m:\gliksbot\vm_shared`
+   - Host: `[PROJECT_PATH]\vm_shared`
    - Guest: `C:\HostShare`
 
 ### 6. DNS Configuration
@@ -122,10 +123,10 @@ Get-Service -Name "DexterService"
 Start the health monitoring system:
 ```powershell
 # Install as Windows Service (optional)
-python m:\gliksbot\health_monitor.py install
+python health_monitor.py install
 
 # Or run manually
-python m:\gliksbot\health_monitor.py
+python health_monitor.py
 ```
 
 ## Verification Checklist
@@ -159,17 +160,17 @@ python m:\gliksbot\health_monitor.py
 ## Configuration Files
 
 ### Key Configuration Files
-- `m:\gliksbot\config.json` - Main application configuration
-- `m:\gliksbot\.env.production` - Environment variables
-- `m:\gliksbot\frontend\dist\web.config` - IIS URL rewrite rules
+- `[PROJECT_PATH]\config.json` - Main application configuration
+- `[PROJECT_PATH]\.env.production` - Environment variables
+- `[PROJECT_PATH]\frontend\dist\web.config` - IIS URL rewrite rules
 
 ### Log Files
-- `m:\gliksbot\logs\dexter.log` - Application logs
-- `m:\gliksbot\logs\health_monitor.log` - Health monitoring logs
-- `m:\gliksbot\logs\health_reports\` - Health check reports
+- `[PROJECT_PATH]\logs\dexter.log` - Application logs
+- `[PROJECT_PATH]\logs\health_monitor.log` - Health monitoring logs
+- `[PROJECT_PATH]\logs\health_reports\` - Health check reports
 
 ### Backup Files
-- `m:\gliksbot\backups\` - Automated daily backups
+- `[PROJECT_PATH]\backups\` - Automated daily backups
 - Retention: 30 days
 
 ## Troubleshooting
@@ -200,8 +201,8 @@ python m:\gliksbot\health_monitor.py
 
 Check logs in order of priority:
 1. Windows Event Log (System and Application)
-2. `m:\gliksbot\logs\dexter.log`
-3. `m:\gliksbot\logs\health_monitor.log`
+2. `[PROJECT_PATH]\logs\dexter.log`
+3. `[PROJECT_PATH]\logs\health_monitor.log`
 4. IIS logs: `C:\inetpub\logs\LogFiles\`
 
 ### Performance Tuning

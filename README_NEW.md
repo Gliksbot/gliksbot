@@ -98,8 +98,8 @@ NEMOTRON_API_KEY=your_nvidia_key_here
 OLLAMAKEY=your_ollama_key_here  # if using cloud Ollama
 
 # Optional Configuration
-DEXTER_CONFIG_FILE=m:/gliksbot/config.json
-DEXTER_DOWNLOADS_DIR=m:/gliksbot/downloads
+DEXTER_CONFIG_FILE=./config.json
+DEXTER_DOWNLOADS_DIR=./downloads
 ```
 
 ## 🔧 Configuration

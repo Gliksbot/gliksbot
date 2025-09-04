@@ -12,7 +12,7 @@ A complete autonomous AI system with LLM collaboration, campaign management, and
 
 ## Architecture
 
-### Backend (`m:/gliksbot/backend/`)
+### Backend (`./backend/`)
 - **FastAPI** REST API with async support
 - **Config-driven** with JSON configuration
 - **Campaign Management** for long-term autonomous operation  
@@ -20,14 +20,14 @@ A complete autonomous AI system with LLM collaboration, campaign management, and
 - **VM Sandbox** using Hyper-V PowerShell Direct
 - **Memory & Patterns** for learning and context
 
-### Frontend (`m:/gliksbot/frontend/`)
+### Frontend (`./frontend/`)
 - **React + Vite** with Tailwind CSS
 - **Campaign Dashboard** for tracking objectives and skills
 - **Real-time Chat** with team collaboration
 - **Live Logs** and collaboration file monitoring
 - **Config Editor** for runtime system adjustments
 
-### VM Integration (`m:/gliksbot/vm_shared/`)
+### VM Integration (`./vm_shared/`)
 - **Hyper-V VM** with no network access for security
 - **PowerShell Direct** for command execution
 - **Shared folder** for code transfer and results
@@ -51,14 +51,14 @@ $env:NEMOTRON_API_KEY = "your-nemotron-key"  # Optional
 ### Quick Start
 1. **Backend**:
    ```bash
-   cd m:/gliksbot/backend
+   cd backend
    pip install fastapi uvicorn httpx pyyaml ldap3 pyjwt psutil python-multipart
    python main.py
    ```
 
 2. **Frontend**:
    ```bash
-   cd m:/gliksbot/frontend
+   cd frontend
    npm install
    npm run dev
    ```
