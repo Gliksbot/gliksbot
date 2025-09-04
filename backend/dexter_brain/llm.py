@@ -30,7 +30,7 @@ async def call_slot(config, llm_name: str, prompt: str) -> str:
     if not model_config.get('enabled', False):
         raise ValueError(f"LLM '{llm_name}' is not enabled")
     
-    provider = model_config.get('provider', '')
+    provider = model_config.get('provider', '').lower()
     
     if provider == 'openai':
         return await _call_openai(model_config, prompt)
@@ -38,6 +38,18 @@ async def call_slot(config, llm_name: str, prompt: str) -> str:
         return await _call_ollama(model_config, prompt)
     elif provider == 'nemotron':
         return await _call_nemotron(model_config, prompt)
+    elif provider == 'vultr':
+        # Vultr uses OpenAI-compatible API format
+        return await _call_openai(model_config, prompt)
+    elif provider == 'anthropic':
+        # Anthropic has different API format - for now use OpenAI format as fallback
+        return await _call_openai(model_config, prompt)
+    elif provider == 'nvidia':
+        # NVIDIA uses OpenAI-compatible API format
+        return await _call_openai(model_config, prompt)
+    elif provider == 'custom':
+        # Custom API endpoint - assume OpenAI-compatible format
+        return await _call_openai(model_config, prompt)
     else:
         raise ValueError(f"Unknown provider '{provider}' for LLM '{llm_name}'")
 
