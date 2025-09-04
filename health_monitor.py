@@ -65,8 +65,9 @@ class HealthMonitor:
         logger.setLevel(logging.INFO)
         
         if not logger.handlers:
-            # File handler
-            log_path = Path("m:/gliksbot/logs/health_monitor.log")
+            # File handler  
+            log_dir = os.environ.get("DEXTER_LOG_PATH", "./logs")
+            log_path = Path(log_dir) / "health_monitor.log"
             log_path.parent.mkdir(exist_ok=True)
             
             file_handler = logging.FileHandler(log_path)
@@ -153,7 +154,9 @@ class HealthMonitor:
     
     async def _check_disk(self) -> Dict[str, any]:
         """Check disk usage."""
-        disk = psutil.disk_usage("m:/")
+        # Use current working directory or environment-specified path
+        disk_path = os.environ.get("DEXTER_DISK_PATH", ".")
+        disk = psutil.disk_usage(disk_path)
         threshold = self.config.get("monitoring", {}).get("thresholds", {}).get("disk_percent", 90)
         percent_used = (disk.used / disk.total) * 100
         
@@ -348,7 +351,8 @@ Please check the system immediately.
     async def save_health_report(self, health_status: Dict[str, any]):
         """Save health report to file."""
         try:
-            reports_dir = Path("m:/gliksbot/logs/health_reports")
+            log_dir = os.environ.get("DEXTER_LOG_PATH", "./logs")
+            reports_dir = Path(log_dir) / "health_reports"
             reports_dir.mkdir(exist_ok=True)
             
             # Save current report
