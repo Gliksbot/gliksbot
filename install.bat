@@ -73,11 +73,34 @@ if not defined NODE_MISSING (
     echo [WARNING] Skipping frontend setup - Node.js not installed
 )
 
-REM Check Docker installation for sandbox
+REM Check and setup sandbox providers (Hyper-V and Docker)
+echo [INFO] Setting up sandbox providers...
+
+REM Check for Hyper-V capabilities
+powershell -Command "Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -ErrorAction SilentlyContinue" >nul 2>&1
+if errorlevel 1 (
+    echo [INFO] Hyper-V not detected - setting up alternatives...
+    echo [WARNING] ⚠️  IMPORTANT: If Hyper-V fails, Docker will be used as sandbox
+    echo [INFO] To enable Hyper-V on Windows Pro/Enterprise, run as Administrator:
+    echo [INFO]   dism /online /enable-feature /featurename:Microsoft-Hyper-V /all /norestart
+    echo [INFO]   dism /online /enable-feature /featurename:HypervisorPlatform /all /norestart
+) else (
+    echo [SUCCESS] Hyper-V capabilities detected
+    echo [INFO] Installing Hyper-V Management Tools...
+    powershell -Command "Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Tools-All -All -NoRestart" >nul 2>&1
+    if errorlevel 1 (
+        echo [WARNING] Failed to install Hyper-V Manager - install manually if needed
+    ) else (
+        echo [SUCCESS] Hyper-V Manager tools installed
+    )
+)
+
+REM Check Docker installation for sandbox fallback
 docker --version >nul 2>&1
 if errorlevel 1 (
     echo [WARNING] Docker not found - sandbox mode will be limited
     echo [WARNING] Install Docker Desktop for full sandbox capabilities
+    echo [INFO] 📋 SANDBOX FALLBACK CHAIN: Hyper-V → Docker → Limited Mode
 ) else (
     echo [INFO] Docker found - sandbox mode available
     echo [INFO] Building Docker sandbox image...
@@ -104,6 +127,11 @@ if not exist .env (
 
 echo.
 echo [SUCCESS] 🎉 Installation completed successfully!
+echo.
+echo 📋 SANDBOX CONFIGURATION:
+echo • If Hyper-V fails or is unavailable, Docker will be used as fallback
+echo • For full sandbox capabilities, ensure either Hyper-V or Docker is working
+echo • System will run in limited mode if neither is available
 echo.
 echo Next steps:
 echo 1. Edit .env file with your API keys (optional)

@@ -28,9 +28,13 @@ from dexter_brain.error_tracker import ErrorTracker, ErrorSeverity
 from dexter_brain.error_healer import ErrorHealer
 from dexter_brain.enhanced_skills import create_and_test_skill_with_healing, get_sandbox_health_status
 
-CONFIG_PATH = os.environ.get("DEXTER_CONFIG_FILE", "/home/runner/work/gliksbot/gliksbot/config.json")
+# Get the directory where this script is located and find project root
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)  # Go up one level from backend/ to project root
+
+CONFIG_PATH = os.environ.get("DEXTER_CONFIG_FILE", os.path.join(PROJECT_ROOT, "config.json"))
 DOWNLOADS_DIR = os.environ.get("DEXTER_DOWNLOADS_DIR", "/tmp/dexter_downloads")
-SKILLS_DIR = os.environ.get("DEXTER_SKILLS_DIR", "/home/runner/work/gliksbot/gliksbot/backend/skills")
+SKILLS_DIR = os.environ.get("DEXTER_SKILLS_DIR", os.path.join(SCRIPT_DIR, "skills"))
 
 # Load config
 _app_cfg: Config = Config.load(CONFIG_PATH)
