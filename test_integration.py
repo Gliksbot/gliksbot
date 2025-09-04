@@ -24,7 +24,8 @@ async def test_docker_sandbox():
     
     try:
         # Load configuration
-        config = Config.load('config.json')
+        from dexter_brain.utils import get_config_path
+        config = Config.load(get_config_path())
         
         # Create sandbox
         sandbox = create_sandbox(config.to_json())
@@ -102,7 +103,8 @@ async def test_collaboration_system():
     
     try:
         # Load configuration
-        config = Config.load('config.json')
+        from dexter_brain.utils import get_config_path
+        config = Config.load(get_config_path())
         
         # Create collaboration manager
         collab_manager = CollaborationManager(config)
@@ -130,7 +132,8 @@ async def test_error_healing_integration():
     
     try:
         # Load configuration
-        config = Config.load('config.json')
+        from dexter_brain.utils import get_config_path
+        config = Config.load(get_config_path())
         
         # Create components
         error_tracker = ErrorTracker(max_errors=100)
@@ -178,7 +181,8 @@ async def test_sandbox_health():
     
     try:
         # Load configuration
-        config = Config.load('config.json')
+        from dexter_brain.utils import get_config_path
+        config = Config.load(get_config_path())
         
         # Create sandbox and check health
         sandbox = create_sandbox(config.to_json())
