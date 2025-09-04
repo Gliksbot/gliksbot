@@ -99,8 +99,15 @@ startup_time = time.time()
 @app.on_event("startup")
 async def startup_event():
     """Initialize error healing system when the application starts."""
-    global _error_healer
+    global _error_healer, _campaign_mgr
     try:
+        # Initialize campaign manager if database is available
+        if _db:
+            _campaign_mgr = CampaignManager(_db)
+            print("✅ Campaign manager initialized")
+        else:
+            print("⚠️  Campaign manager not initialized - database unavailable")
+        
         # Initialize error healer
         _error_healer = ErrorHealer(_app_cfg, _error_tracker, _collab_mgr)
         
@@ -1146,7 +1153,7 @@ def _build_memory_context(user_input: str) -> str:
 async def _get_dexter_response(user_input: str) -> str:
     """Get Dexter's immediate response"""
     try:
-        from .dexter_brain.llm import call_slot
+        from dexter_brain.llm import call_slot
         # Prepend memory context if available
         mem_ctx = _build_memory_context(user_input)
         prompt = f"{mem_ctx}\n\nUser: {user_input}" if mem_ctx else user_input
