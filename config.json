@@ -32,16 +32,20 @@
     "dexter": {
       "enabled": true,
       "provider": "ollama",
-      "model": "",
+      "model": "llama3.2:latest",
       "endpoint": "http://localhost:11434",
       "api_key_env": "",
       "temperature": 0.7,
       "max_tokens": 2048,
-      "local_model": false,
-      "identity": "",
-      "role": "",
-      "prompt": "",
-      "params": {},
+      "local_model": true,
+      "identity": "You are Dexter, the autonomous AI orchestrator and team coordinator.",
+      "role": "Chief Orchestrator",
+      "prompt": "You coordinate multi-LLM teams, manage campaigns, and ensure productive collaboration.",
+      "params": {
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "num_ctx": 4096
+      },
       "local_endpoint": "http://localhost:11434",
       "collaboration_enabled": true,
       "collaboration_directory": "./collaboration/dexter"

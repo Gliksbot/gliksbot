@@ -97,6 +97,10 @@ async def _call_ollama(model_config: Dict[str, Any], prompt: str) -> str:
     model = model_config.get('model', 'llama3.1:8b-instruct-q4_0')
     params = model_config.get('params', {})
     
+    # Validate model configuration
+    if not model or model.strip() == "":
+        raise ValueError(f"No model specified for Ollama. Please set the 'model' field in configuration.")
+    
     # Get API key if needed for remote Ollama service
     api_key = None
     api_key_env = model_config.get('api_key_env')
@@ -111,54 +115,29 @@ async def _call_ollama(model_config: Dict[str, Any], prompt: str) -> str:
     # Check if this is a remote Ollama service (has API key and https endpoint)
     is_remote = api_key and endpoint.startswith('https')
     
-    async with httpx.AsyncClient() as client:
-        if is_remote:
-            # Use chat format for remote Ollama service - try the correct endpoint
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
-            
-            # Try the direct chat endpoint first
-            try:
-                response = await client.post(
-                    f"{endpoint}/api/chat",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": model,
-                        "messages": messages,
-                        "stream": False,
-                        "options": {
-                            "temperature": params.get('temperature', 0.2),
-                            "num_ctx": params.get('num_ctx', 4096)
-                        }
-                    },
-                    timeout=120.0
-                )
-                response.raise_for_status()
-                data = response.json()
-                return data['message']['content']
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    # Fall back to generate endpoint for remote Ollama
-                    full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-                    
+    try:
+        async with httpx.AsyncClient() as client:
+            if is_remote:
+                # Use chat format for remote Ollama service - try the correct endpoint
+                messages = []
+                if system_prompt:
+                    messages.append({"role": "system", "content": system_prompt})
+                messages.append({"role": "user", "content": prompt})
+                
+                # Try the direct chat endpoint first
+                try:
                     response = await client.post(
-                        f"{endpoint}/api/generate",
+                        f"{endpoint}/api/chat",
                         headers={
                             "Authorization": f"Bearer {api_key}",
                             "Content-Type": "application/json"
                         },
                         json={
                             "model": model,
-                            "prompt": full_prompt,
+                            "messages": messages,
                             "stream": False,
                             "options": {
                                 "temperature": params.get('temperature', 0.2),
-                                "top_p": params.get('top_p', 0.9),
                                 "num_ctx": params.get('num_ctx', 4096)
                             }
                         },
@@ -166,36 +145,84 @@ async def _call_ollama(model_config: Dict[str, Any], prompt: str) -> str:
                     )
                     response.raise_for_status()
                     data = response.json()
-                    return data['response']
-                else:
-                    raise
+                    return data['message']['content']
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 404:
+                        # Fall back to generate endpoint for remote Ollama
+                        full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+                        
+                        response = await client.post(
+                            f"{endpoint}/api/generate",
+                            headers={
+                                "Authorization": f"Bearer {api_key}",
+                                "Content-Type": "application/json"
+                            },
+                            json={
+                                "model": model,
+                                "prompt": full_prompt,
+                                "stream": False,
+                                "options": {
+                                    "temperature": params.get('temperature', 0.2),
+                                    "top_p": params.get('top_p', 0.9),
+                                    "num_ctx": params.get('num_ctx', 4096)
+                                }
+                            },
+                            timeout=120.0
+                        )
+                        response.raise_for_status()
+                        data = response.json()
+                        return data['response']
+                    else:
+                        raise ValueError(f"Remote Ollama HTTP error {e.response.status_code}: {e.response.text}")
+                except httpx.ConnectError as e:
+                    raise ValueError(f"Failed to connect to remote Ollama at {endpoint}. Please check the endpoint URL. Error: {str(e)}")
+                except httpx.TimeoutException as e:
+                    raise ValueError(f"Remote Ollama request timed out after 120 seconds. Error: {str(e)}")
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Invalid response from remote Ollama server.")
+            else:
+                # Use generate format for local Ollama
+                full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+                
+                # Prepare headers
+                headers = {"Content-Type": "application/json"}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+                
+                response = await client.post(
+                    f"{endpoint}/api/generate",
+                    headers=headers,
+                    json={
+                        "model": model,
+                        "prompt": full_prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": params.get('temperature', 0.2),
+                            "top_p": params.get('top_p', 0.9),
+                            "num_ctx": params.get('num_ctx', 4096)
+                        }
+                    },
+                    timeout=120.0
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data['response']
+    
+    except httpx.ConnectError as e:
+        raise ValueError(f"Failed to connect to Ollama at {endpoint}. Please ensure Ollama is running and accessible. Error: {str(e)}")
+    except httpx.TimeoutException as e:
+        raise ValueError(f"Ollama request timed out after 120 seconds. The model '{model}' may be loading for the first time. Error: {str(e)}")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise ValueError(f"Model '{model}' not found in Ollama. Please run 'ollama pull {model}' to download it.")
+        elif e.response.status_code == 500:
+            raise ValueError(f"Ollama server error. The model '{model}' may not be compatible or loaded properly.")
         else:
-            # Use generate format for local Ollama
-            full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-            
-            # Prepare headers
-            headers = {"Content-Type": "application/json"}
-            if api_key:
-                headers["Authorization"] = f"Bearer {api_key}"
-            
-            response = await client.post(
-                f"{endpoint}/api/generate",
-                headers=headers,
-                json={
-                    "model": model,
-                    "prompt": full_prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": params.get('temperature', 0.2),
-                        "top_p": params.get('top_p', 0.9),
-                        "num_ctx": params.get('num_ctx', 4096)
-                    }
-                },
-                timeout=120.0
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data['response']
+            raise ValueError(f"Ollama HTTP error {e.response.status_code}: {e.response.text}")
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid response from Ollama server. Server may be starting up or misconfigured.")
+    except Exception as e:
+        raise ValueError(f"Unexpected error calling Ollama: {str(e)}")
 
 async def _call_nemotron(model_config: Dict[str, Any], prompt: str) -> str:
     """Call Nemotron API."""
