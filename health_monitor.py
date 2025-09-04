@@ -24,7 +24,23 @@ import sqlite3
 class HealthMonitor:
     """Production health monitoring system."""
     
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = None):
+        if config_path is None:
+            # Use the utility to find config.json relative to project root
+            import sys
+            import os
+            # Add backend to path to access utils
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            backend_dir = os.path.join(script_dir, 'backend')
+            if backend_dir not in sys.path:
+                sys.path.insert(0, backend_dir)
+            try:
+                from dexter_brain.utils import get_config_path
+                config_path = get_config_path()
+            except Exception:
+                # Fallback to relative path if utils can't be imported
+                config_path = os.path.join(script_dir, "config.json")
+        
         self.config_path = config_path
         self.config = self._load_config()
         self.logger = self._setup_logging()

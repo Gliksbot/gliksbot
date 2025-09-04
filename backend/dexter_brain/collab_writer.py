@@ -7,7 +7,9 @@ from .io import append_jsonl
 
 def _load_config() -> dict:
     try:
-        return json.load(open('config.json','r',encoding='utf-8'))
+        from .utils import get_config_path
+        config_path = get_config_path()
+        return json.load(open(config_path,'r',encoding='utf-8'))
     except Exception:
         return {}
 

@@ -227,8 +227,9 @@ async def _call_nemotron(model_config: Dict[str, Any], prompt: str) -> str:
 async def test_llm_call():
     """Test function for development."""
     from dexter_brain.config import Config
+    from dexter_brain.utils import get_config_path
     
-    config = Config.load("../config.json")
+    config = Config.load(get_config_path())
     
     # Test with enabled LLMs
     for llm_name, model_config in config.models.items():

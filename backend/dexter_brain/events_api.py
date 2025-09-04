@@ -7,7 +7,8 @@ router = APIRouter()
 
 def _keepalive_interval() -> int:
     try:
-        cfg = json.load(open('config.json','r',encoding='utf-8'))
+        from .utils import get_config_path
+        cfg = json.load(open(get_config_path(),'r',encoding='utf-8'))
         return int(cfg.get('events',{}).get('keepalive_sec', 20))
     except Exception:
         return 20

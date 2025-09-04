@@ -4,11 +4,13 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Body
 from typing import Optional
 from .events import emit
-from .exec_backend import choose_backend, Limits, ExecBackend
+from .utils import get_config_path
 
 # Prefer config.json runtime.db_path if available; fallback to env or backend default
 try:
-    _cfg = json.load(open('config.json','r',encoding='utf-8'))
+    from .utils import get_config_path
+    config_path = get_config_path()
+    _cfg = json.load(open(config_path,'r',encoding='utf-8'))
     _db_path_from_cfg = _cfg.get('runtime',{}).get('db_path')
 except Exception:
     _db_path_from_cfg = None
@@ -111,7 +113,7 @@ def test_skill(skill_id: int, cmd: Optional[list[str]] = Body(None), sandbox_cfg
     if not pkgs:
         raise HTTPException(404, 'no package found to test')
     pkg = pkgs[-1]
-    cfg = sandbox_cfg or json.load(open('config.json','r'))
+    cfg = sandbox_cfg or json.load(open(get_config_path(),'r'))
     backend = choose_backend(cfg)
     limits = Limits()
     handle = backend.run(pkg_zip=pkg, cmd=(cmd or ['python','/runner.py','--package','/run/pkg.zip']), limits=limits)
@@ -127,7 +129,7 @@ def test_skill(skill_id: int, cmd: Optional[list[str]] = Body(None), sandbox_cfg
 
 @router.post('/{skill_id}/promote')
 def promote_skill(skill_id: int, risk_score: float = Body(0.0)):
-    cfg = json.load(open('config.json','r'))
+    cfg = json.load(open(get_config_path(),'r'))
     max_risk = cfg.get('policy',{}).get('autonomy',{}).get('max_risk_score', 0.5)
     if risk_score > max_risk:
         raise HTTPException(400, f'risk {risk_score} exceeds threshold {max_risk}')

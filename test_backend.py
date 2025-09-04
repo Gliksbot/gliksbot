@@ -6,14 +6,18 @@ import json
 import sys
 import os
 
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
 # Add backend to path
-sys.path.insert(0, '/workspaces/gliksbot/backend')
+backend_dir = os.path.join(script_dir, 'backend')
+sys.path.insert(0, backend_dir)
 
 def test_config_loading():
     """Test if the config can be loaded successfully"""
     try:
         from dexter_brain.config import Config
-        config = Config.load('/workspaces/gliksbot/config.json')
+        from dexter_brain.utils import get_config_path
+        config = Config.load(get_config_path())
         print("✓ Config loaded successfully")
         print(f"  Models configured: {list(config.models.keys())}")
         return config
@@ -39,8 +43,9 @@ def test_collaboration_manager(config):
 def test_api_imports():
     """Test if the main API module imports correctly"""
     try:
+        from dexter_brain.utils import get_config_path
         # Set required environment variables
-        os.environ.setdefault("DEXTER_CONFIG_FILE", "/workspaces/gliksbot/config.json")
+        os.environ.setdefault("DEXTER_CONFIG_FILE", get_config_path())
         os.environ.setdefault("DEXTER_DOWNLOADS_DIR", "/tmp/dexter_downloads")
         
         # Create downloads directory

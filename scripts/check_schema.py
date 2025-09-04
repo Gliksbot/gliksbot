@@ -11,7 +11,16 @@ import time
 
 def load_cfg():
     try:
-        return json.load(open('config.json','r',encoding='utf-8'))
+        import sys
+        import os
+        # Add backend to path to access utils
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(script_dir)
+        backend_dir = os.path.join(project_root, 'backend')
+        sys.path.insert(0, backend_dir)
+        
+        from dexter_brain.utils import get_config_path
+        return json.load(open(get_config_path(),'r',encoding='utf-8'))
     except Exception:
         return {}
 
