@@ -33,12 +33,6 @@ if __package__ in (None, ""):
     __package__ = "backend"
 
 # Import from backend package using relative imports
-from .auth import (
-    router as auth_router,
-    get_current_user,
-    verify_token_optional,
-    auth_manager,
-)
 from .dexter_brain.config import Config
 from .dexter_brain.campaigns import CampaignManager
 from .dexter_brain.collaboration import CollaborationManager
@@ -177,7 +171,6 @@ async def startup_event():
         )
 
 # Include API routers
-app.include_router(auth_router)
 from .dexter_brain import events_api, collaboration_api, skills_api
 app.include_router(events_api.router)
 app.include_router(collaboration_api.router)
@@ -196,14 +189,6 @@ app.add_middleware(
 class HealthOut(BaseModel):
     ok: bool = True
     version: str = "3.0"
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
 
 class CampaignIn(BaseModel):
     name: str
@@ -240,7 +225,7 @@ def health():
 
 # NEW: Detailed system health endpoint
 @app.get("/health/detailed")
-def detailed_health(current_user: dict = Depends(get_current_user)):
+def detailed_health():
     """Get detailed system health including sandbox and error tracking status."""
     
     # Get sandbox health
@@ -277,8 +262,7 @@ def detailed_health(current_user: dict = Depends(get_current_user)):
 # NEW: Error tracking endpoints
 @app.get("/errors/recent")
 def get_recent_errors(
-    minutes: int = Query(60, description="Get errors from last N minutes"),
-    current_user: dict = Depends(get_current_user)
+    minutes: int = Query(60, description="Get errors from last N minutes")
 ):
     """Get recent system errors."""
     errors = _error_tracker.get_recent_errors(minutes)
@@ -289,14 +273,13 @@ def get_recent_errors(
     }
 
 @app.get("/errors/statistics")
-def get_error_statistics(current_user: dict = Depends(get_current_user)):
+def get_error_statistics():
     """Get error statistics and trends."""
     return _error_tracker.get_error_statistics()
 
 @app.post("/errors/{error_id}/resolve")
 def mark_error_resolved(
-    error_id: str,
-    current_user: dict = Depends(get_current_user)
+    error_id: str
 ):
     """Manually mark an error as resolved."""
     success = _error_tracker.mark_resolved(error_id)
@@ -308,8 +291,7 @@ def mark_error_resolved(
 # NEW: Sandbox testing endpoint
 @app.post("/sandbox/test")
 async def test_sandbox(
-    test_code: str,
-    current_user: dict = Depends(get_current_user)
+    test_code: str
 ):
     """Test code execution in the sandbox."""
     try:
@@ -335,36 +317,8 @@ async def test_sandbox(
         )
         raise HTTPException(status_code=500, detail=f"Sandbox test failed: {e}")
 
-# Authentication routes
-@app.post("/auth/login", response_model=LoginResponse)
-def login(credentials: LoginRequest):
-    """Login with hardcoded credentials and return a JWT token."""
-    user_info = auth_manager.authenticate_user(credentials.username, credentials.password)
-    if not user_info:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid username or password"
-        )
-
-    # Generate a JWT token.  Use the backwards‑compatible alias on the
-    # AuthManager which encodes the username into the subject (sub) claim.
-    token = auth_manager.create_jwt_token(user_info)
-
-    # The response_model specifies ``access_token`` and ``token_type`` fields.
-    return LoginResponse(access_token=token, token_type="bearer")
-
-@app.post("/auth/logout")
-def logout():
-    """Logout endpoint (token invalidation handled client-side)"""
-    return {"message": "Logged out successfully"}
-
-@app.get("/auth/me")
-def get_current_user_info(current_user: dict = Depends(get_current_user)):
-    """Get current user information"""
-    return current_user
-
 @app.get("/config", response_model=ConfigOut)
-def get_config(current_user: dict = Depends(get_current_user)):
+def get_config():
     return ConfigOut(config=_app_cfg.to_json())
 
 @app.get("/config/public", response_model=ConfigOut)
@@ -373,7 +327,7 @@ def get_config_public():
     return ConfigOut(config=_app_cfg.to_json())
 
 @app.put("/config", response_model=ConfigOut)
-def put_config(payload: Dict[str, Any], current_user: dict = Depends(get_current_user)):
+def put_config(payload: Dict[str, Any]):
     global _app_cfg, _collab_mgr
     if "api_key" in json.dumps(payload).lower():
         raise HTTPException(400, "Do not store API keys in config; use api_key_env names and env vars.")
@@ -399,7 +353,7 @@ def put_config(payload: Dict[str, Any], current_user: dict = Depends(get_current
 
 # Campaign routes
 @app.post("/campaigns", response_model=CampaignOut)
-async def create_campaign(payload: CampaignIn, current_user: dict = Depends(get_current_user)):
+async def create_campaign(payload: CampaignIn):
     """Create a new campaign and broadcast to LLMs for planning"""
     if not _campaign_mgr:
         raise HTTPException(500, "Campaign manager not initialized")
@@ -433,7 +387,7 @@ async def create_campaign(payload: CampaignIn, current_user: dict = Depends(get_
     )
 
 @app.get("/campaigns")
-async def list_campaigns(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+async def list_campaigns(status: Optional[str] = None):
     """List all campaigns"""
     if not _campaign_mgr:
         raise HTTPException(500, "Campaign manager not initialized")
@@ -455,7 +409,7 @@ async def list_campaigns(status: Optional[str] = None, current_user: dict = Depe
     ) for c in campaigns]
 
 @app.get("/campaigns/{campaign_id}", response_model=CampaignOut)
-async def get_campaign(campaign_id: str, current_user: dict = Depends(get_current_user)):
+async def get_campaign(campaign_id: str):
     """Get specific campaign details"""
     if not _campaign_mgr:
         raise HTTPException(500, "Campaign manager not initialized")
@@ -482,7 +436,7 @@ async def get_campaign(campaign_id: str, current_user: dict = Depends(get_curren
 
 # Enhanced chat with autonomous skill generation
 @app.post("/chat", response_model=ChatOut)
-async def chat(payload: ChatIn, current_user: dict = Depends(get_current_user)):
+async def chat(payload: ChatIn):
     """Enhanced chat with autonomous skill generation and execution"""
     msg = payload.message or ""
     
@@ -622,7 +576,7 @@ class TTSSettingsOut(BaseModel):
 
 # Individual LLM chat endpoint
 @app.post("/llm/chat", response_model=LLMChatOut)
-async def llm_chat(payload: LLMChatIn, current_user: dict = Depends(get_current_user)):
+async def llm_chat(payload: LLMChatIn):
     """Chat with a specific LLM model"""
     try:
         # Use provided config or fall back to global config
@@ -676,7 +630,7 @@ async def get_tts_settings():
     return TTSSettingsOut(settings=tts_config)
 
 @app.post("/tts/settings")
-async def update_tts_settings(payload: TTSSettingsIn, current_user: dict = Depends(get_current_user)):
+async def update_tts_settings(payload: TTSSettingsIn):
     """Update global TTS settings"""
     global _app_cfg
     
@@ -726,7 +680,7 @@ async def get_model_tts_settings(model_name: str):
     return TTSSettingsOut(settings=model_settings)
 
 @app.post("/tts/settings/{model_name}")
-async def update_model_tts_settings(model_name: str, payload: TTSSettingsIn, current_user: dict = Depends(get_current_user)):
+async def update_model_tts_settings(model_name: str, payload: TTSSettingsIn):
     """Update TTS settings for a specific model"""
     global _app_cfg
     
@@ -1086,7 +1040,7 @@ async def get_collaboration_status(session_id: str):
     }
 
 @app.post("/models/{model_name}/config")
-async def update_model_config(model_name: str, payload: Dict[str, Any], current_user: dict = Depends(get_current_user)):
+async def update_model_config(model_name: str, payload: Dict[str, Any]):
     """Update configuration for a specific model (authenticated)"""
     global _app_cfg, _collab_mgr
     
@@ -1112,7 +1066,7 @@ async def update_model_config(model_name: str, payload: Dict[str, Any], current_
     return {"message": f"Model {model_name} configuration updated", "config": payload}
 
 @app.post("/system/models/{model_name}/config")
-async def update_model_config_system(model_name: str, payload: Dict[str, Any], current_user: dict = Depends(get_current_user)):
+async def update_model_config_system(model_name: str, payload: Dict[str, Any]):
     """Update configuration for a specific model (system access, no auth required)"""
     global _app_cfg, _collab_mgr
     
@@ -1189,7 +1143,7 @@ def validate_model_config(name: str, config: Dict[str, Any]) -> List[str]:
     return errors
 
 @app.get("/history")
-async def get_chat_history(current_user: dict = Depends(get_current_user)):
+async def get_chat_history():
     """Get chat history - placeholder implementation"""
     # TODO: Implement actual chat history storage/retrieval
     return {"interactions": []}
@@ -1465,7 +1419,7 @@ class SandboxSettingsIn(BaseModel):
     auto_promote: Optional[bool] = None
 
 @app.post("/sandbox/settings")
-async def update_sandbox_settings(payload: SandboxSettingsIn, current_user: dict = Depends(get_current_user)):
+async def update_sandbox_settings(payload: SandboxSettingsIn):
     """Update sandbox runtime settings (provider, auto promotion)."""
     global _app_cfg
     with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
