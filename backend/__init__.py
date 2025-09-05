@@ -1,9 +1,7 @@
 """Backend package initialization."""
 
 # Make core modules available at package level
-from . import auth
 from . import dexter_brain
-from . import service
 from . import main
 
 # -----------------------------------------------------------------------------
@@ -22,5 +20,5 @@ import sys as _sys
 if 'dexter_brain' not in _sys.modules:
     _sys.modules['dexter_brain'] = importlib.import_module('.dexter_brain', __name__)
 
-__all__ = ['auth', 'dexter_brain', 'service', 'main']
+__all__ = ['dexter_brain', 'main']
 
