@@ -1,0 +1,180 @@
+/* CSS styling for Gliksbot CLI interface */
+
+/* Main layout */
+Screen {
+    background: #1e1e2e;
+}
+
+/* Panel layout */
+.panel-row {
+    height: 1fr;
+    padding: 1;
+}
+
+.llm-panel {
+    border: solid #6c7086;
+    margin: 1;
+    min-height: 30;
+    background: #181825;
+}
+
+/* Panel headers */
+.panel-header {
+    height: 3;
+    background: #313244;
+    padding: 1;
+    align: center middle;
+}
+
+.panel-title {
+    width: 1fr;
+    text-style: bold;
+    color: #cdd6f4;
+}
+
+.panel-switch {
+    width: auto;
+}
+
+/* Chat area */
+.chat-display {
+    border: none;
+    background: #11111b;
+    color: #cdd6f4;
+    min-height: 15;
+    scrollbar-size: 1 1;
+}
+
+.chat-input-row {
+    height: 3;
+    padding: 1;
+}
+
+.chat-input {
+    width: 1fr;
+    margin-right: 1;
+}
+
+.send-button {
+    width: auto;
+    min-width: 8;
+    background: #89b4fa;
+    color: #11111b;
+}
+
+.send-button:hover {
+    background: #74c7ec;
+}
+
+/* Configuration form */
+.config-form {
+    padding: 1;
+    height: 1fr;
+    overflow-y: auto;
+}
+
+.config-form Label {
+    margin-top: 1;
+    margin-bottom: 1;
+    color: #f9e2af;
+    text-style: bold;
+}
+
+.config-form Input {
+    margin-bottom: 1;
+    background: #313244;
+    color: #cdd6f4;
+}
+
+.config-textarea {
+    height: 4;
+    background: #313244;
+    color: #cdd6f4;
+    margin-bottom: 1;
+}
+
+.save-button {
+    margin-top: 1;
+    margin-bottom: 1;
+    background: #a6e3a1;
+    color: #11111b;
+}
+
+.save-button:hover {
+    background: #94e2d5;
+}
+
+.status-label {
+    margin-top: 1;
+    padding: 1;
+    background: #45475a;
+    color: #cdd6f4;
+    text-align: center;
+}
+
+/* Tabs */
+Tabs {
+    background: #313244;
+}
+
+Tab {
+    background: #45475a;
+    color: #cdd6f4;
+    margin-right: 1;
+}
+
+Tab.-active {
+    background: #89b4fa;
+    color: #11111b;
+}
+
+TabPane {
+    background: #181825;
+    padding: 1;
+}
+
+/* Header and Footer */
+Header {
+    background: #313244;
+    color: #cdd6f4;
+}
+
+Footer {
+    background: #313244;
+    color: #cdd6f4;
+}
+
+/* Switch styling */
+Switch {
+    background: #45475a;
+}
+
+Switch > .switch--slider {
+    background: #6c7086;
+}
+
+Switch.-on > .switch--slider {
+    background: #a6e3a1;
+}
+
+/* Scrollbars */
+.chat-display > .scroll--vertical {
+    background: #45475a;
+}
+
+.chat-display > .scroll--vertical > .scrollbar--thumb {
+    background: #6c7086;
+}
+
+/* Focus styles */
+Input:focus {
+    border: solid #89b4fa;
+}
+
+TextArea:focus {
+    border: solid #89b4fa;
+}
+
+Button:focus {
+    border: solid #f9e2af;
+}
