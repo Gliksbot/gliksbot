@@ -1,0 +1,7 @@
+{
+  "timestamp": 1757087796.8003683,
+  "llm": "specialist1",
+  "phase": "error",
+  "session": "heal_err_1757087766564_177_1757087796",
+  "content": "OpenAI-compatible API error 422: {\"message\":\"Invalid API key\"}"
+}

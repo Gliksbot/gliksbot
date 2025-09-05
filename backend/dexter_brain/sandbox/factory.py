@@ -2,32 +2,34 @@
 
 from typing import Dict, Any
 from .docker_provider import DockerSandbox
+from .hyperv_provider import HyperVSandbox
 
 
 def create_sandbox(config: Dict[str, Any]):
-    """Factory method to create appropriate sandbox provider."""
+    """Factory method to create appropriate sandbox provider.
+    Tries requested provider, falls back to docker if unavailable.
+    """
     
     runtime_config = config.get('runtime', {})
     sandbox_config = runtime_config.get('sandbox', {})
     provider = sandbox_config.get('provider', 'docker')
     
-    if provider == 'docker':
+    if provider == 'hyperv':
+        try:
+            return HyperVSandbox(sandbox_config)
+        except Exception as e:
+            # Fallback to docker
+            # Optional: could log via error tracker if available in caller
+            return DockerSandbox(sandbox_config)
+    elif provider == 'docker':
         return DockerSandbox(sandbox_config)
-    elif provider == 'hyperv':
-        # For backward compatibility, could implement HyperVSandbox here
-        # For now, we'll raise an error suggesting Docker
-        raise ValueError(
-            f"Hyper-V sandbox provider not fully supported. "
-            f"Please use 'docker' provider instead. "
-            f"Update your config.json: runtime.sandbox.provider = 'docker'"
-        )
     else:
-        raise ValueError(f"Unknown sandbox provider: {provider}. Supported providers: 'docker'")
+        raise ValueError(f"Unknown sandbox provider: {provider}. Supported providers: 'docker', 'hyperv'")
 
 
 def get_supported_providers() -> list:
     """Get list of supported sandbox providers."""
-    return ['docker']
+    return ['docker', 'hyperv']
 
 
 def validate_sandbox_config(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -63,7 +65,11 @@ def validate_sandbox_config(config: Dict[str, Any]) -> Dict[str, Any]:
             validation["docker_available"] = False
             
     elif provider == 'hyperv':
-        validation["warnings"].append("Hyper-V provider is deprecated. Consider switching to Docker.")
+        import platform
+        if platform.system() != 'Windows':
+            validation["valid"] = False
+            validation["errors"].append("Hyper-V provider requested on non-Windows host")
+        # Additional health checks deferred to runtime.
         
     else:
         validation["valid"] = False

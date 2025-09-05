@@ -11,22 +11,48 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-# Authentication imports
-from auth import auth_manager, get_current_user
+# -----------------------------------------------------------------------------
+# Bootstrap when running as top‑level module
+#
+# When this file is executed via ``python backend/main.py`` or imported through
+# ``uvicorn main:app`` while the current working directory is ``backend``, the
+# module is treated as a top‑level module and ``__package__`` is empty.  In that
+# case, relative imports like ``from .dexter_brain.config`` will fail with
+# ``ImportError: No module named 'dexter_brain'``.  To allow this file to be
+# executed directly and still support relative imports, detect the empty
+# ``__package__`` and adjust ``sys.path`` and ``__package__`` accordingly.
+import pathlib
+import sys
+if __package__ in (None, ""):
+    current_dir = pathlib.Path(__file__).resolve().parent
+    parent_dir = current_dir.parent
+    # Prepend the project root so that ``backend`` becomes importable as a
+    # package.  Without this, importing ``backend.dexter_brain`` would fail.
+    if str(parent_dir) not in sys.path:
+        sys.path.insert(0, str(parent_dir))
+    __package__ = "backend"
 
-# Placeholder imports - you'll replace these with actual implementations
-from dexter_brain.config import Config
-from dexter_brain.campaigns import CampaignManager
-from dexter_brain.collaboration import CollaborationManager
-from dexter_brain.llm import call_slot
+# Import from backend package using relative imports
+from .auth import (
+    router as auth_router,
+    get_current_user,
+    verify_token_optional,
+    auth_manager,
+)
+from .dexter_brain.config import Config
+from .dexter_brain.campaigns import CampaignManager
+from .dexter_brain.collaboration import CollaborationManager
+from .dexter_brain.llm import call_slot
 # NEW: BrainDB for STM/LTM
-from dexter_brain.db import BrainDB
+from .dexter_brain.db import BrainDB
 # NEW: SkillsManager for dynamic skill execution
-from skills.skills_manager import SkillsManager
+from .skills.skills_manager import SkillsManager
 # NEW: Error tracking and healing
-from dexter_brain.error_tracker import ErrorTracker, ErrorSeverity
-from dexter_brain.error_healer import ErrorHealer
-from dexter_brain.enhanced_skills import create_and_test_skill_with_healing, get_sandbox_health_status
+from .dexter_brain.error_tracker import ErrorTracker, ErrorSeverity
+from .dexter_brain.error_healer import ErrorHealer
+from .dexter_brain.enhanced_skills import create_and_test_skill_with_healing, get_sandbox_health_status
+# NEW: Autonomous skill generation
+from .dexter_brain.autonomy import AutonomyManager
 
 # Get the directory where this script is located and find project root
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -64,12 +90,22 @@ except Exception as e:
 _error_tracker = ErrorTracker(max_errors=1000, persist_path="./logs/errors.jsonl")
 _error_healer: Optional[ErrorHealer] = None
 
+# NEW: Autonomous skill generation system  
+_autonomy_mgr: Optional['AutonomyManager'] = None
+
 app = FastAPI(title="Dexter API v3", version="3.0", docs_url="/docs", redoc_url="/redoc")
 
 # NEW: Global exception handler for error tracking
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler that logs errors for healing."""
+    """Global exception handler that logs errors for healing. Redacts auth headers."""
+    safe_headers = {}
+    for k, v in request.headers.items():
+        lk = k.lower()
+        if lk in {"authorization", "proxy-authorization"}:
+            safe_headers[k] = "REDACTED"
+        else:
+            safe_headers[k] = v
     error_id = _error_tracker.log_error(
         error_type=type(exc).__name__,
         message=str(exc),
@@ -78,20 +114,12 @@ async def global_exception_handler(request: Request, exc: Exception):
         context={
             "endpoint": str(request.url),
             "method": request.method,
-            "headers": dict(request.headers),
+            "headers": safe_headers,
             "user_agent": request.headers.get("user-agent", "unknown")
         },
         stack_trace=traceback.format_exc()
     )
-    
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": "Internal server error", 
-            "error_id": error_id,
-            "message": "Error has been logged and will be analyzed by the healing system"
-        }
-    )
+    return JSONResponse(status_code=500, content={"error": "Internal server error", "error_id": error_id, "message": "Error has been logged"})
 
 # NEW: Startup event to initialize error healer
 startup_time = time.time()
@@ -99,7 +127,7 @@ startup_time = time.time()
 @app.on_event("startup")
 async def startup_event():
     """Initialize error healing system when the application starts."""
-    global _error_healer, _campaign_mgr
+    global _error_healer, _campaign_mgr, _autonomy_mgr
     try:
         # Initialize campaign manager if database is available
         if _db:
@@ -111,6 +139,14 @@ async def startup_event():
         # Initialize error healer
         _error_healer = ErrorHealer(_app_cfg, _error_tracker, _collab_mgr)
         
+        # Initialize autonomy manager
+        if _skills_mgr and _collab_mgr:
+            from .dexter_brain.sandbox import create_sandbox
+            _autonomy_mgr = AutonomyManager(_app_cfg, _collab_mgr, _skills_mgr, create_sandbox)
+            print("✅ Autonomous skill generation system initialized")
+        else:
+            print("⚠️  Autonomy manager not initialized - missing dependencies")
+        
         # Start error monitoring task
         asyncio.create_task(_error_healer.start_error_monitoring())
         
@@ -119,28 +155,30 @@ async def startup_event():
         # Log successful startup
         _error_tracker.log_error(
             "SYSTEM_STARTUP",
-            "Dexter v3 system started successfully with Docker sandbox and error healing",
+            "Dexter v3 system started successfully with autonomous skill generation",
             ErrorSeverity.LOW,
             "system",
             {
                 "sandbox_provider": _app_cfg.runtime.get('sandbox', {}).get('provider', 'unknown'),
                 "error_tracking_enabled": True,
-                "error_healing_enabled": True
+                "error_healing_enabled": True,
+                "autonomy_enabled": _autonomy_mgr is not None
             },
             auto_capture_traceback=False
         )
         
     except Exception as e:
-        print(f"❌ Failed to initialize error healer: {e}")
+        print(f"❌ Failed to initialize systems: {e}")
         _error_tracker.log_error(
             "STARTUP_ERROR",
-            f"Failed to initialize error healer: {e}",
+            f"Failed to initialize systems: {e}",
             ErrorSeverity.CRITICAL,
             "system"
         )
 
 # Include API routers
-from dexter_brain import events_api, collaboration_api, skills_api
+app.include_router(auth_router)
+from .dexter_brain import events_api, collaboration_api, skills_api
 app.include_router(events_api.router)
 app.include_router(collaboration_api.router)
 app.include_router(skills_api.router)
@@ -164,9 +202,8 @@ class LoginRequest(BaseModel):
     password: str
 
 class LoginResponse(BaseModel):
-    token: str
-    user: dict
-    message: str = "Login successful"
+    access_token: str
+    token_type: str = "bearer"
 
 class CampaignIn(BaseModel):
     name: str
@@ -276,7 +313,7 @@ async def test_sandbox(
 ):
     """Test code execution in the sandbox."""
     try:
-        from dexter_brain.sandbox import create_sandbox
+        from .dexter_brain.sandbox import create_sandbox
         
         sandbox = create_sandbox(_app_cfg.to_json())
         result = await sandbox.execute_skill(test_code)
@@ -301,19 +338,20 @@ async def test_sandbox(
 # Authentication routes
 @app.post("/auth/login", response_model=LoginResponse)
 def login(credentials: LoginRequest):
-    """Login with hardcoded credentials"""
+    """Login with hardcoded credentials and return a JWT token."""
     user_info = auth_manager.authenticate_user(credentials.username, credentials.password)
     if not user_info:
         raise HTTPException(
             status_code=401,
             detail="Invalid username or password"
         )
-    
+
+    # Generate a JWT token.  Use the backwards‑compatible alias on the
+    # AuthManager which encodes the username into the subject (sub) claim.
     token = auth_manager.create_jwt_token(user_info)
-    return LoginResponse(
-        token=token,
-        user=user_info
-    )
+
+    # The response_model specifies ``access_token`` and ``token_type`` fields.
+    return LoginResponse(access_token=token, token_type="bearer")
 
 @app.post("/auth/logout")
 def logout():
@@ -442,10 +480,10 @@ async def get_campaign(campaign_id: str, current_user: dict = Depends(get_curren
         progress=campaign.progress
     )
 
-# Enhanced chat with immediate LLM broadcast
+# Enhanced chat with autonomous skill generation
 @app.post("/chat", response_model=ChatOut)
-async def chat(payload: ChatIn):
-    """Enhanced chat with immediate LLM collaboration"""
+async def chat(payload: ChatIn, current_user: dict = Depends(get_current_user)):
+    """Enhanced chat with autonomous skill generation and execution"""
     msg = payload.message or ""
     
     # Check if Dexter is properly configured
@@ -460,73 +498,97 @@ async def chat(payload: ChatIn):
             campaign_updated=None,
             collaboration_session=None
         )
-    
-    # 1. IMMEDIATELY broadcast to all LLMs (don't wait for Dexter)
+
+    # Build conversation history for context (last 10 messages)
+    conversation_history = []
+    if _db:
+        try:
+            recent_memories = _db.get_memories('stm', limit=10)
+            conversation_history = [m.get('content', '') for m in recent_memories if m.get('content')]
+        except Exception:
+            pass
+
+    # 1. IMMEDIATELY broadcast to all LLMs and start autonomous processing
     session_id = await _collab_mgr.broadcast_user_input(msg)
     
-    # 2. If this is part of a campaign, add as objective
+    # 2. Process autonomous skill request in parallel
+    autonomous_result = None
+    if _autonomy_mgr:
+        try:
+            autonomous_result = await _autonomy_mgr.process_autonomous_request(msg, conversation_history)
+        except Exception as e:
+            print(f"Warning: Autonomous processing error: {e}")
+            autonomous_result = {'autonomous_action': False, 'error': str(e)}
+
+    # 3. Handle campaign integration
     campaign_updated = None
     if payload.campaign_id and _campaign_mgr:
         try:
             _campaign_mgr.add_objective(payload.campaign_id, msg)
             campaign_updated = payload.campaign_id
         except Exception:
-            pass  # Campaign might not exist, continue anyway
-    
-    # 3. Dexter provides immediate response while LLMs work in background
-    try:
-        dexter_reply = await _get_dexter_response(msg)
-    except Exception as e:
-        return ChatOut(
-            reply=f"Error communicating with Dexter: {str(e)}. Please check Dexter's configuration in the Models tab.",
-            executed=None,
-            campaign_updated=campaign_updated,
-            collaboration_session=session_id,
-            skills_results=None
-        )
-    
-    # 3.5. Execute all skills on the incoming message
+            pass
+
+    # 4. Get Dexter's response - may include clarifying questions
+    dexter_reply = ""
+    if autonomous_result and autonomous_result.get('needs_clarification'):
+        # Dexter asks clarifying questions
+        dexter_reply = autonomous_result.get('clarifying_question', 'Could you provide more details?')
+    else:
+        # Normal Dexter response
+        try:
+            dexter_reply = await _get_dexter_response(msg)
+        except Exception as e:
+            return ChatOut(
+                reply=f"Error communicating with Dexter: {str(e)}. Please check Dexter's configuration in the Models tab.",
+                executed=None,
+                campaign_updated=campaign_updated,
+                collaboration_session=session_id,
+                skills_results=None
+            )
+
+    # 5. Execute existing skills on the message
     skills_results = None
     if _skills_mgr:
         try:
             skills_results = await _skills_mgr.execute_all_skills(msg)
         except Exception as e:
-            print(f"Warning: Error executing skills: {e}")
+            print(f"Warning: Error executing existing skills: {e}")
             skills_results = [{
                 'success': False,
                 'error': f"Skills execution failed: {str(e)}",
                 'skill_name': 'system'
             }]
-    
-    # 4. Check if this requires skill creation
+
+    # 6. Handle autonomous skill generation results
     executed = None
-    if _intent_implies_skill_creation(msg):
-        # Wait briefly for LLM collaboration, then proceed with skill creation
-        collaboration_complete = await _collab_mgr.wait_for_collaboration_complete(session_id, timeout=10.0)
-        
-        if collaboration_complete:
-            winning_solution = _collab_mgr.get_winning_solution(session_id)
-            if winning_solution:
-                # Use LLM collaboration result for skill creation
-                executed = await _create_and_test_skill(msg, winning_solution["solution"])
-        
-        # Fallback: Dexter creates skill if LLM collaboration didn't produce usable result
-        if not executed or not executed.get("ok"):
-            executed = await _create_and_test_skill(msg, dexter_reply)
-    
-    # 5. Persist this exchange as STM for future context (best-effort)
+    if autonomous_result and autonomous_result.get('autonomous_action'):
+        if autonomous_result.get('skill_generated'):
+            executed = autonomous_result.get('promotion_result', {})
+        elif autonomous_result.get('used_existing_skill'):
+            executed = {
+                'ok': True,
+                'used_existing': True,
+                'skill_name': autonomous_result.get('skill_name'),
+                'execution_result': autonomous_result.get('execution_result')
+            }
+
+    # 7. Persist conversation for future context
     try:
         if _db is not None:
+            conversation_content = f"User: {msg}\nDexter: {dexter_reply}"
+            if autonomous_result and autonomous_result.get('autonomous_action'):
+                conversation_content += f"\nAutonomous Action: {autonomous_result.get('skill_name', 'skill executed')}"
+            
             _db.add_memory(
-                content=f"User: {msg}\nDexter: {dexter_reply}",
+                content=conversation_content,
                 memory_type='stm',
-                metadata={"campaign_id": payload.campaign_id, "session_id": session_id},
-                tags=["chat", "dexter"],
-                importance=0.5
+                tags=['chat', 'conversation'],
+                metadata={'timestamp': time.time(), 'session_id': session_id}
             )
     except Exception:
         pass
-    
+
     return ChatOut(
         reply=dexter_reply,
         executed=executed,
@@ -560,7 +622,7 @@ class TTSSettingsOut(BaseModel):
 
 # Individual LLM chat endpoint
 @app.post("/llm/chat", response_model=LLMChatOut)
-async def llm_chat(payload: LLMChatIn):
+async def llm_chat(payload: LLMChatIn, current_user: dict = Depends(get_current_user)):
     """Chat with a specific LLM model"""
     try:
         # Use provided config or fall back to global config
@@ -760,7 +822,6 @@ async def get_collaboration_files():
             'status': model_status,
             'files': model_files
         }
-    
     return response
 
 @app.get("/collaboration/files/{model_name}/{filename}")
@@ -915,7 +976,15 @@ async def send_input_to_slot(slot: str, message: dict):
             raise HTTPException(400, f"Model {model_name} is not enabled")
         
         # Create a direct chat with the LLM (bypass collaboration for direct user input)
-        from dexter_brain.llm import call_slot
+        try:
+            # Attempt relative import first.  When this module is executed as part of the
+            # ``backend`` package, ``__package__`` is set and this will succeed.
+            from .dexter_brain.llm import call_slot
+        except ImportError:
+            # Fallback for execution contexts where ``__package__`` is not set or relative
+            # imports are not allowed.  Import the fully qualified name via the
+            # ``backend`` package rather than ``dexter_brain`` to avoid ``ModuleNotFoundError``.
+            from backend.dexter_brain.llm import call_slot
         response = await call_slot(_app_cfg, model_name, user_message)
         
         # Also write this interaction to collaboration files for visibility
@@ -1043,7 +1112,7 @@ async def update_model_config(model_name: str, payload: Dict[str, Any], current_
     return {"message": f"Model {model_name} configuration updated", "config": payload}
 
 @app.post("/system/models/{model_name}/config")
-async def update_model_config_system(model_name: str, payload: Dict[str, Any]):
+async def update_model_config_system(model_name: str, payload: Dict[str, Any], current_user: dict = Depends(get_current_user)):
     """Update configuration for a specific model (system access, no auth required)"""
     global _app_cfg, _collab_mgr
     
@@ -1153,7 +1222,7 @@ def _build_memory_context(user_input: str) -> str:
 async def _get_dexter_response(user_input: str) -> str:
     """Get Dexter's immediate response"""
     try:
-        from dexter_brain.llm import call_slot
+        from .dexter_brain.llm import call_slot
         # Prepend memory context if available
         mem_ctx = _build_memory_context(user_input)
         prompt = f"{mem_ctx}\n\nUser: {user_input}" if mem_ctx else user_input
@@ -1163,33 +1232,131 @@ async def _get_dexter_response(user_input: str) -> str:
         # If we can't call Dexter, return an error message instead of fake data
         raise Exception(f"Failed to communicate with Dexter: {str(e)}")
 
-def _intent_implies_skill_creation(text: str) -> bool:
-    """Check if user input implies need for new skill - enhanced with collaboration"""
+# NEW: Detect poem-to-desktop intent
+_def_poem_marker = object()
+
+def _is_poem_desktop_request(text: str) -> bool:
+    t = text.lower()
+    return ('poem' in t or 'poetry' in t) and 'desktop' in t and ('write' in t or 'save' in t or 'create' in t)
+
+def _generate_poem_skill_code(user_request: str) -> str:
+    """Generate safe poem skill code; writes to Desktop if it exists, otherwise to generated_poems folder."""
+    import re as _re
+    snippet = _re.sub(r'[^a-zA-Z0-9 .,!?-]', ' ', user_request)[:120]
+    return f'''import os, time, re
+
+def run(message: str) -> dict:
+    """Auto-generated poem writer skill derived from: {snippet}"""
+    # Try desktop first, fallback to local folder
+    user_home = os.path.expanduser('~')
+    desktop_candidate = os.path.join(user_home, 'Desktop')
+    desktop_dir = desktop_candidate if os.path.isdir(desktop_candidate) else None
+    target_dir = desktop_dir or os.path.join(os.getcwd(), 'generated_poems')
+    os.makedirs(target_dir, exist_ok=True)
+    
+    base_lines = [
+        'Whispers of circuits awake in the night',
+        'Patterned reflections in cold phosphor light',
+        'Silent intentions assemble a theme',
+        'Turning a prompt into structured dream'
+    ]
+    cleaned = re.sub(r'[^\\w .,!?-]', ' ', message)[:120]
+    if cleaned:
+        base_lines.append(f'Inspired by: {{cleaned}}')
+    
+    poem = "\\n".join(base_lines)[:1000]
+    ts = int(time.time())
+    filename = f'poem_{{ts}}.txt'
+    file_path = os.path.join(target_dir, filename)
+    
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(poem + '\\n')
+    
+    return {{
+        'success': True,
+        'skill_name': 'poem_writer',
+        'desktop_write': bool(desktop_dir),
+        'file_path': file_path,
+        'lines': len(base_lines),
+        'poem_content': poem
+    }}
+'''
+
+def _extract_python_code(text: str) -> str:
+    """Extract Python code from markdown or mixed content"""
     import re
     
-    # First check existing skills to avoid duplicates
-    if _skills_mgr:
-        existing_skills = [skill['name'] for skill in _skills_mgr.list_skills()]
-        # Simple check to see if request might be handled by existing skills
-        for skill_name in existing_skills:
-            # If skill name appears in request, might not need new skill
-            if skill_name.lower() in text.lower():
-                return False
+    # Try to find code blocks first
+    code_block_pattern = r'```(?:python)?\s*\n(.*?)\n```'
+    matches = re.findall(code_block_pattern, text, re.DOTALL | re.IGNORECASE)
+    if matches:
+        return matches[0].strip()
     
-    # Enhanced pattern matching for skill creation intent
-    creation_patterns = [
-        r"\b(create|build|make|generate|write|develop|code|script|tool|skill)\b",
-        r"\b(implement|program|automate|function)\b",
-        r"\bcan you (make|create|build|write)\b",
-        r"\bi need (a|an) (script|tool|function|skill)\b",
-        r"\bhelp me (create|build|make|write)\b"
-    ]
+    # If no code blocks, look for function definitions
+    if 'def ' in text:
+        lines = text.split('\n')
+        in_function = False
+        code_lines = []
+        indent_level = 0
+        
+        for line in lines:
+            if line.strip().startswith('def '):
+                in_function = True
+                indent_level = len(line) - len(line.lstrip())
+                code_lines.append(line)
+            elif in_function:
+                if line.strip() == '' or (line.startswith(' ' * indent_level) and len(line) > indent_level):
+                    code_lines.append(line)
+                else:
+                    break
+        
+        if code_lines:
+            return '\n'.join(code_lines)
     
-    for pattern in creation_patterns:
-        if re.search(pattern, text, re.IGNORECASE):
-            return True
+    # Fallback: return text as-is if it looks like code
+    if any(keyword in text for keyword in ['def ', 'import ', 'return ', 'if ', 'for ']):
+        return text
     
-    return False
+    return ""
+
+def _indent_code(code: str, spaces: int) -> str:
+    """Indent code by specified number of spaces"""
+    if not code:
+        return ""
+    
+    lines = code.split('\n')
+    indent = ' ' * spaces
+    return '\n'.join(indent + line if line.strip() else line for line in lines)
+
+async def _test_skill_in_sandbox(skill_file_path: str, user_request: str) -> Dict[str, Any]:
+    """Test skill in sandbox environment"""
+    try:
+        from .dexter_brain.sandbox import create_sandbox
+        
+        # Read the skill code
+        with open(skill_file_path, 'r', encoding='utf-8') as f:
+            skill_code = f.read()
+        
+        # Create sandbox instance
+        sandbox = create_sandbox(_app_cfg.to_json())
+        
+        # Test the skill
+        result = await sandbox.execute_skill(skill_code, user_request)
+        
+        return {
+            'success': result.get('success', False),
+            'output': result.get('output', ''),
+            'error': result.get('error'),
+            'execution_time': result.get('execution_time', 0),
+            'sandbox_type': result.get('sandbox_type', 'unknown')
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Sandbox testing failed: {str(e)}",
+            'execution_time': 0
+        }
 
 async def _create_and_test_skill(user_request: str, solution_content: str) -> Dict[str, Any]:
     """Create and test skill based on solution"""
@@ -1198,141 +1365,74 @@ async def _create_and_test_skill(user_request: str, solution_content: str) -> Di
     import re
     
     try:
-        # Generate skill name
-        skill_name = f"skill_{int(time.time())}"
+        poem_mode = _is_poem_desktop_request(user_request)
+        # Generate skill name early
+        base_prefix = 'poem' if poem_mode else 'skill'
+        skill_name = f"{base_prefix}_{int(time.time())}"
         
-        # Extract Python code from solution if it contains markup
-        python_code = _extract_python_code(solution_content)
-        if not python_code:
-            # If no Python code found, treat entire solution as code
-            python_code = solution_content
+        # If poem-to-desktop request, bypass LLM code extraction and use template
+        if poem_mode:
+            python_code = _generate_poem_skill_code(user_request)
+        else:
+            # Extract Python code from solution if it contains markup
+            python_code = _extract_python_code(solution_content)
+            if not python_code:
+                python_code = solution_content
+            # Ensure the code has a run function
+            if 'def run(' not in python_code:
+                python_code = f'''def run(message: str) -> dict:\n    """Generated skill from: {user_request[:100]}"""\n    try:\n        # User's solution:\n{_indent_code(python_code, 8)}\n        \n        return {{\n            "success": True,\n            "result": "Skill executed successfully",\n            "skill_name": "{skill_name}"\n        }}\n    except Exception as e:\n        return {{\n            "success": False,\n            "error": str(e),\n            "skill_name": "{skill_name}"\n        }}\n'''
         
-        # Ensure the code has a run function
-        if 'def run(' not in python_code:
-            # Wrap the code in a run function
-            python_code = f'''def run(message: str) -> dict:
-    """Generated skill from: {user_request[:100]}"""
-    try:
-        # User's solution:
-{_indent_code(python_code, 8)}
-        
-        return {{
-            "success": True,
-            "result": "Skill executed successfully",
-            "skill_name": "{skill_name}"
-        }}
-    except Exception as e:
-        return {{
-            "success": False,
-            "error": str(e),
-            "skill_name": "{skill_name}"
-        }}
-'''
-        
-        # Write to temporary directory first
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_file = os.path.join(temp_dir, f"{skill_name}.py")
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                f.write(python_code)
-            
-            # Test the skill in the temporary directory
-            test_result = await _test_skill_in_sandbox(temp_file, user_request)
-            
-            if test_result.get("success", False):
-                # Move to skills directory
-                if _skills_mgr:
-                    success = _skills_mgr.add_skill_file(skill_name, python_code)
-                    if success:
-                        # Reload skills to include the new one
-                        _skills_mgr.reload_skills()
-                        
-                        return {
-                            "ok": True,
-                            "skill_name": skill_name,
-                            "tested_in_vm": True,
-                            "promoted": True,
-                            "solution_used": solution_content[:100] + "...",
-                            "test_result": test_result
-                        }
+        # Optional retry loop (simple) for non-poem skills if sandbox fails due to syntax
+        MAX_ATTEMPTS = 2 if not poem_mode else 1
+        last_test_result: Dict[str, Any] = {}
+        for attempt in range(1, MAX_ATTEMPTS+1):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_file = os.path.join(temp_dir, f"{skill_name}.py")
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    f.write(python_code)
+                last_test_result = await _test_skill_in_sandbox(temp_file, user_request)
+            if last_test_result.get('success'):  # passed sandbox
+                break
                 
-                return {
-                    "ok": False,
-                    "skill_name": skill_name,
-                    "tested_in_vm": True,
-                    "promoted": False,
-                    "error": "Failed to add skill to skills manager",
-                    "solution_used": solution_content[:100] + "..."
-                }
-            else:
-                return {
-                    "ok": False,
-                    "skill_name": skill_name,
-                    "tested_in_vm": True,
-                    "promoted": False,
-                    "error": test_result.get("error", "Skill testing failed"),
-                    "solution_used": solution_content[:100] + "..."
-                }
+        if last_test_result.get('success', False):
+            auto_promote = _app_cfg.runtime.get('sandbox', {}).get('auto_promote_skills', True)
+            promoted = False
+            executed_result = None
+            if auto_promote and _skills_mgr:
+                success = _skills_mgr.add_skill_file(skill_name, python_code)
+                if success:
+                    _skills_mgr.reload_skills()
+                    promoted = True
+                    if poem_mode:
+                        executed_result = _skills_mgr.execute_skill_by_name(skill_name, user_request)
+            return {
+                'ok': True,
+                'skill_name': skill_name,
+                'tested_in_vm': True,
+                'promoted': promoted,
+                'solution_used': (solution_content[:100] + '...') if solution_content else ('poem_template' if poem_mode else ''),
+                'test_result': last_test_result,
+                'executed_result': executed_result
+            }
+        else:
+            return {
+                'ok': False,
+                'skill_name': skill_name,
+                'tested_in_vm': True,
+                'promoted': False,
+                'error': last_test_result.get('error', 'Skill testing failed'),
+                'solution_used': (solution_content[:100] + '...') if solution_content else ''
+            }
                 
     except Exception as e:
         return {
-            "ok": False,
-            "skill_name": f"skill_{int(time.time())}",
-            "tested_in_vm": False,
-            "promoted": False,
-            "error": str(e),
-            "solution_used": solution_content[:100] + "..."
+            'ok': False,
+            'skill_name': f"skill_{int(time.time())}",
+            'tested_in_vm': False,
+            'promoted': False,
+            'error': str(e),
+            'solution_used': solution_content[:100] + '...'
         }
-
-def _extract_python_code(content: str) -> str:
-    """Extract Python code from markdown or other markup"""
-    import re
-    
-    # Look for Python code blocks
-    python_blocks = re.findall(r'```python\n(.*?)\n```', content, re.DOTALL)
-    if python_blocks:
-        return python_blocks[0]
-    
-    # Look for general code blocks
-    code_blocks = re.findall(r'```\n(.*?)\n```', content, re.DOTALL)
-    if code_blocks:
-        return code_blocks[0]
-    
-    return content
-
-def _indent_code(code: str, spaces: int) -> str:
-    """Indent code by specified number of spaces"""
-    indent = ' ' * spaces
-    lines = code.split('\n')
-    return '\n'.join(indent + line if line.strip() else line for line in lines)
-
-async def _test_skill_in_sandbox(skill_file: str, test_message: str) -> Dict[str, Any]:
-    """Test a skill file in a sandboxed environment"""
-    try:
-        # Simple testing: try to import and run the skill
-        import importlib.util
-        import sys
-        
-        spec = importlib.util.spec_from_file_location("test_skill", skill_file)
-        if spec is None or spec.loader is None:
-            return {"success": False, "error": "Could not load skill module"}
-        
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        
-        # Check if run function exists
-        if not hasattr(module, 'run'):
-            return {"success": False, "error": "Skill does not have a 'run' function"}
-        
-        # Test the run function
-        result = module.run(test_message)
-        
-        if isinstance(result, dict) and result.get('success'):
-            return {"success": True, "message": "Skill test passed"}
-        else:
-            return {"success": False, "error": f"Skill test failed: {result}"}
-            
-    except Exception as e:
-        return {"success": False, "error": f"Skill testing error: {str(e)}"}
 
 # Downloads route
 @app.get("/downloads/list")
@@ -1359,6 +1459,24 @@ def get_download(filename: str):
         raise HTTPException(404, f"File not found: {filename}")
     return FileResponse(full, filename=filename)
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080, reload=False)
+# NEW: Sandbox settings model
+class SandboxSettingsIn(BaseModel):
+    provider: Optional[str] = None
+    auto_promote: Optional[bool] = None
+
+@app.post("/sandbox/settings")
+async def update_sandbox_settings(payload: SandboxSettingsIn, current_user: dict = Depends(get_current_user)):
+    """Update sandbox runtime settings (provider, auto promotion)."""
+    global _app_cfg
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+        current = json.load(f)
+    rt = current.setdefault('runtime', {})
+    sb = rt.setdefault('sandbox', {})
+    if payload.provider:
+        sb['provider'] = payload.provider
+    if payload.auto_promote is not None:
+        sb['auto_promote_skills'] = payload.auto_promote
+    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+        json.dump(current, f, indent=2)
+    _app_cfg = Config.load(CONFIG_PATH)
+    return {"ok": True, "sandbox": sb}

@@ -2,6 +2,7 @@ from __future__ import annotations
 import json, os, time, sqlite3, zipfile, io, subprocess, threading
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Body
+from .exec_backend import ExecBackend, Limits, choose_backend
 from typing import Optional
 from .events import emit
 from .utils import get_config_path

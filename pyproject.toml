@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dexter"
+version = "3.0.0"
+authors = [
+  { name="Gliksbot", email="dev@gliksbot.com" },
+]
+description = "Dexter v3 - Autonomous AI Skill Builder"
+readme = "README.md"
+requires-python = ">=3.8"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

@@ -30,25 +30,25 @@
   "collaboration_contract": "You are a member of Dexter's team. You MUST collaborate via files, watch peers' files, obey Dexter. For action requests, PROPOSE a SKILL with this template and keep code pure (no os/subprocess/network): === SKILL_SPEC === ... as documented ... === Then provide CODE block with `run(payload: dict) -> dict` and inline pytest tests. End your message with \"VOTE: <slot>\" on a single line.",
   "models": {
     "dexter": {
-      "enabled": true,
-      "provider": "ollama",
-      "model": "llama3.2:latest",
-      "endpoint": "http://localhost:11434",
-      "api_key_env": "",
-      "temperature": 0.7,
-      "max_tokens": 2048,
       "local_model": true,
-      "identity": "You are Dexter, the autonomous AI orchestrator and team coordinator.",
+      "provider": "ollama",
+      "endpoint": "http://localhost:11434",
+      "model": "gemma3:1b",
       "role": "Chief Orchestrator",
-      "prompt": "You coordinate multi-LLM teams, manage campaigns, and ensure productive collaboration.",
       "params": {
-        "temperature": 0.7,
         "top_p": 0.9,
-        "num_ctx": 4096
+        "num_ctx": 4096,
+        "temperature": 0.7
       },
-      "local_endpoint": "http://localhost:11434",
+      "collaboration_directory": "./collaboration/dexter",
+      "prompt": "You coordinate multi-LLM teams, manage campaigns, and ensure productive collaboration.",
+      "identity": "You are Dexter, the autonomous AI orchestrator and team coordinator.",
+      "temperature": 0.7,
+      "enabled": true,
+      "max_tokens": 2048,
+      "api_key_env": "",
       "collaboration_enabled": true,
-      "collaboration_directory": "./collaboration/dexter"
+      "local_endpoint": "http://localhost:11434"
     },
     "analyst": {
       "enabled": true,
@@ -73,10 +73,10 @@
     },
     "engineer": {
       "enabled": true,
-      "provider": "openai",
-      "endpoint": "https://api.openai.com/v1",
-      "model": "gpt-4o",
-      "api_key_env": "OPENAI_API_KEY",
+      "provider": "ollama",
+      "endpoint": "https://ollama.com",
+      "model": "deepseek-v3.1:671b",
+      "api_key_env": "OLLAMAKEY",
       "local_model": false,
       "local_endpoint": "http://localhost:11434",
       "identity": "You are a senior software engineer and architect with expertise in multiple programming languages and frameworks.",
@@ -125,7 +125,7 @@
       "provider": "vultr",
       "endpoint": "https://api.vultrinference.com/v1",
       "model": "llama-3.3-70b-instruct-fp8",
-      "api_key_env": "V4MLLTDNI2GZHVHZ6PJQD3JTYMRLB6MQN37A",
+      "api_key_env": "VULTR_API_KEY",
       "local_model": false,
       "local_endpoint": "http://localhost:11434",
       "identity": "You are a domain specialist. Your expertise area will be configured based on current needs.",

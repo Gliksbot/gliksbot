@@ -31,14 +31,25 @@ class DexterService(win32serviceutil.ServiceFramework):
         self.main()
         
     def main(self):
-        # Set working directory to backend folder
+        # Set working directory to backend folder so relative paths (e.g. for static
+        # files) continue to work.  Determine the project root and ensure it is
+        # on ``sys.path`` so that the ``backend`` package can be imported.  When
+        # running uvicorn with a module path ("backend.main:app"), this makes
+        # relative imports inside ``main.py`` resolve correctly.
         backend_dir = Path(__file__).parent
         os.chdir(backend_dir)
-        
-        # Start uvicorn server
+        root_dir = backend_dir.parent
+        # Prepend the root directory to sys.path if it's not already present
+        if str(root_dir) not in sys.path:
+            sys.path.insert(0, str(root_dir))
+
+        # Start uvicorn server.  Use the fully qualified module name rather than
+        # "main:app" to avoid ``ImportError: No module named 'dexter_brain'`` when
+        # uvicorn imports the module outside of a package context.  Do not enable
+        # reload in a Windows service.
         try:
             uvicorn.run(
-                "main:app",
+                "backend.main:app",
                 host="0.0.0.0",
                 port=8080,
                 reload=False,

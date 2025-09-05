@@ -1,0 +1,7 @@
+{
+  "timestamp": 1757088474.1299686,
+  "llm": "analyst",
+  "phase": "error",
+  "session": "heal_err_1757088096833_672_1757088459",
+  "content": "OpenAI-compatible API error 429: {\n    \"error\": {\n        \"message\": \"Rate limit reached for gpt-4o-mini in organization org-nLS91nTAwcQxgDJGpdiefMhm on tokens per min (TPM): Limit 200000, Used 179476, Requested 28232. Please try again in 2.312s. Visit https://platform.openai.com/account/rate-limits to learn more.\",\n        \"type\": \"tokens\",\n        \"param\": null,\n        \"code\": \"rate_limit_exceeded\"\n    }\n}\n"
+}
