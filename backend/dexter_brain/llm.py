@@ -41,8 +41,43 @@ async def call_slot(config, llm_name: str, prompt: str) -> str:
         return await _call_nemotron(model_config, prompt)
     elif provider == 'anthropic':
         return await _call_anthropic(model_config, prompt)
+    elif provider == 'model':
+        return await _call_model_api(model_config, prompt)
     else:
         raise ValueError(f"Unknown provider '{provider}' for LLM '{llm_name}'")
+# External "model" API integration
+async def _call_model_api(model_config: Dict[str, Any], prompt: str) -> str:
+    """Call the external 'model' API for Dexter backend operations."""
+    api_key = model_config.get('api_key')
+    if not api_key:
+        raise ValueError("Model API key not configured")
+    endpoint = model_config.get('endpoint', 'https://api.model.com/v1').rstrip('/')
+    model = model_config.get('model', '')
+    params = model_config.get('params', {})
+    identity = model_config.get('identity', '')
+    role = model_config.get('role', '')
+    system_prompt = f"{identity} {role}".strip()
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(f"{endpoint}/chat/completions", headers=headers, json={
+            "model": model,
+            "messages": messages,
+            "temperature": params.get('temperature', 0.7),
+            "max_tokens": params.get('max_tokens', 2000)
+        }, timeout=60.0)
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise ValueError(f"Model API error {e.response.status_code}: {e.response.text}")
+        data = resp.json()
+        try:
+            return data['choices'][0]['message']['content']
+        except Exception:
+            raise ValueError(f"Unexpected response format: {data}")
 
 async def _call_openai_compatible(model_config: Dict[str, Any], prompt: str) -> str:
     """Call OpenAI compatible endpoint honoring configured endpoint URL."""

@@ -1,3 +1,32 @@
+/* Mobile-friendly panel layout */
+.llm-panel-mobile {
+    border: solid #6c7086;
+    margin: 2vw;
+    min-height: 20vh;
+    background: #181825;
+    flex-direction: column;
+    width: 96vw;
+    max-width: 600px;
+}
+
+
+    .panel-switch-mobile {
+        width: 10vw;
+        min-width: 40px;
+        height: 40px;
+        touch-action: manipulation;
+    }
+    .tabbed-content-mobile {
+        font-size: 1em;
+        padding: 2vw;
+    }
+    .send-button {
+        min-width: 60px;
+        height: 40px;
+        font-size: 1em;
+        touch-action: manipulation;
+    }
+}
 /* CSS styling for Gliksbot CLI interface */
 
 /* Main layout */
@@ -178,3 +207,4 @@ TextArea:focus {
 Button:focus {
     border: solid #f9e2af;
 }
+//
