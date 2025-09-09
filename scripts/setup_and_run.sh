@@ -30,7 +30,6 @@ PY=$(command -v python3 || command -v python)
 . ./.venv/bin/activate
 python -m pip install --upgrade pip
 [ -f requirements.txt ] && pip install -r requirements.txt || true
-[ -f backend/requirements.txt ] && pip install -r backend/requirements.txt || true
 
 # Frontend deps
 if [ -d frontend ] && has npm; then

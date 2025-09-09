@@ -50,12 +50,8 @@ setup_venv_install(){
   . ./.venv/bin/activate
   python -m pip install --upgrade pip
   if [ -f requirements.txt ]; then
-    info "Installing root requirements.txt..."
+    info "Installing requirements.txt..."
     pip install -r requirements.txt
-  fi
-  if [ -f backend/requirements.txt ]; then
-    info "Installing backend/requirements.txt..."
-    pip install -r backend/requirements.txt
   fi
 }
 

@@ -23,7 +23,7 @@ function Test-Command($n){ $null -ne (Get-Command $n -ErrorAction SilentlyContin
 function Ensure-Tool($id,$check,$name){ if(Test-Command $check){Write-Info "$name present";return}; if(Test-Command 'winget'){ winget install --id $id -e --accept-package-agreements --accept-source-agreements | Out-Null } else { Write-Warn "Install $name manually." } }
 function Wait-Docker(){ $deadline=(Get-Date).AddMinutes(3); while((Get-Date)-lt $deadline){ try{ docker info | Out-Null; Write-Info "Docker ready"; return } catch { Start-Sleep 3 } }; Write-Warn "Docker not ready, continuing" }
 
-function Setup-Python($root){ Push-Location $root; try { if(-not (Test-Path ".venv")){ python -m venv .venv }; & .\.venv\Scripts\python -m pip install --upgrade pip; if(Test-Path "$root\requirements.txt"){ & .\.venv\Scripts\pip install -r "$root\requirements.txt"}; if(Test-Path "$root\backend\requirements.txt"){ & .\.venv\Scripts\pip install -r "$root\backend\requirements.txt" } } finally { Pop-Location } }
+function Setup-Python($root){ Push-Location $root; try { if(-not (Test-Path ".venv")){ python -m venv .venv }; & .\.venv\Scripts\python -m pip install --upgrade pip; if(Test-Path "$root\requirements.txt"){ & .\.venv\Scripts\pip install -r "$root\requirements.txt"} } finally { Pop-Location } }
 function Setup-Frontend($dir){ if(-not (Test-Path $dir)){ Write-Warn "No frontend dir"; return }; if(Test-Command 'npm'){ Push-Location $dir; try { npm install } finally { Pop-Location } } else { Write-Warn "npm not found" } }
 
 function Start-Backend($root){ $cmd = "cd `"$root`"; .\\.venv\\Scripts\\python serve_backend.py"; Write-Info "Starting backend (127.0.0.1:8080)..."; Start-Process powershell -ArgumentList "-NoExit","-Command","$cmd" | Out-Null }
