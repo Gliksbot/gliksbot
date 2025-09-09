@@ -87,6 +87,33 @@ class BrainDB:
             usage_count INTEGER DEFAULT 0
         )
         """)
+
+        # Knowledge graph tables
+        self.conn.execute("""
+        CREATE TABLE IF NOT EXISTS knowledge_nodes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            label TEXT NOT NULL,
+            data TEXT,
+            embedding TEXT,
+            created_ts REAL NOT NULL,
+            updated_ts REAL NOT NULL
+        )
+        """)
+
+        self.conn.execute("""
+        CREATE TABLE IF NOT EXISTS knowledge_edges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id INTEGER NOT NULL,
+            target_id INTEGER NOT NULL,
+            relation TEXT NOT NULL,
+            weight REAL DEFAULT 1.0,
+            metadata TEXT,
+            created_ts REAL NOT NULL,
+            updated_ts REAL NOT NULL,
+            FOREIGN KEY(source_id) REFERENCES knowledge_nodes(id) ON DELETE CASCADE,
+            FOREIGN KEY(target_id) REFERENCES knowledge_nodes(id) ON DELETE CASCADE
+        )
+        """)
         
         # Collaboration sessions
         self.conn.execute("""
@@ -107,6 +134,7 @@ class BrainDB:
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_ts)")
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_skills_status ON skills(status)")
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_collaboration_status ON collaboration_sessions(status)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_label ON knowledge_nodes(label)")
         
         self.conn.commit()
     
@@ -236,12 +264,58 @@ class BrainDB:
         """Update memory access timestamp and count."""
         now = time.time()
         self.conn.execute("""
-        UPDATE memories 
+        UPDATE memories
         SET accessed_ts = ?, access_count = access_count + 1
         WHERE id = ?
         """, (now, memory_id))
         self.conn.commit()
-    
+
+    # Knowledge graph methods
+    def add_knowledge_node(self, label: str, data: Dict[str, Any] = None,
+                            embedding: List[float] = None) -> int:
+        """Add a node to the knowledge graph."""
+        now = time.time()
+        data_json = json.dumps(data or {})
+        embedding_json = json.dumps(embedding or [])
+        cursor = self.conn.execute(
+            """
+            INSERT INTO knowledge_nodes (label, data, embedding, created_ts, updated_ts)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (label, data_json, embedding_json, now, now),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def add_knowledge_edge(self, source_id: int, target_id: int, relation: str,
+                            weight: float = 1.0, metadata: Dict[str, Any] = None) -> int:
+        """Add an edge connecting two nodes in the knowledge graph."""
+        now = time.time()
+        metadata_json = json.dumps(metadata or {})
+        cursor = self.conn.execute(
+            """
+            INSERT INTO knowledge_edges (source_id, target_id, relation, weight, metadata, created_ts, updated_ts)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (source_id, target_id, relation, weight, metadata_json, now, now),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_knowledge_node(self, node_id: int) -> Optional[Dict[str, Any]]:
+        row = self.fetchone("SELECT * FROM knowledge_nodes WHERE id = ?", (node_id,))
+        return self._row_to_dict(row) if row else None
+
+    def get_neighbors(self, node_id: int) -> List[Dict[str, Any]]:
+        rows = self.fetchall(
+            """
+            SELECT * FROM knowledge_edges
+            WHERE source_id = ? OR target_id = ?
+            """,
+            (node_id, node_id),
+        )
+        return [self._row_to_dict(r) for r in rows]
+
     # Skill management methods
     def add_skill(self, name: str, description: str, code: str, 
                   test_results: Dict[str, Any] = None, tags: List[str] = None) -> int:
@@ -316,8 +390,9 @@ class BrainDB:
         result = dict(row)
         
         # Parse JSON fields
-        for field in ['metadata', 'tags', 'test_results', 'pattern_data', 
-                      'winning_solution', 'all_solutions', 'vote_results']:
+        for field in ['metadata', 'tags', 'test_results', 'pattern_data',
+                      'winning_solution', 'all_solutions', 'vote_results',
+                      'data', 'embedding']:
             if field in result and result[field]:
                 try:
                     result[field] = json.loads(result[field])
