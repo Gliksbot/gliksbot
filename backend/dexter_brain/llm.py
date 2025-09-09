@@ -10,9 +10,14 @@ import os
 from typing import Any, Dict, Optional
 import httpx
 
+try:  # Allow running as standalone module
+    from .db import BrainDB
+except ImportError:  # pragma: no cover
+    from db import BrainDB
+
 OPENAI_COMPAT_PROVIDERS = {"openai", "vultr", "nvidia", "custom"}
 
-async def call_slot(config, llm_name: str, prompt: str) -> str:
+async def call_slot(config, llm_name: str, prompt: str, *, db: BrainDB | None = None) -> str:
     """
     Call a specific LLM slot with the given prompt.
     
@@ -31,6 +36,28 @@ async def call_slot(config, llm_name: str, prompt: str) -> str:
     model_config = models[llm_name]
     if not model_config.get('enabled', False):
         raise ValueError(f"LLM '{llm_name}' is not enabled")
+
+    # Load context from Dexter's brain if available
+    close_db = False
+    if db is None:
+        try:
+            rt = getattr(config, 'runtime', {}) if hasattr(config, 'runtime') else {}
+            db_path = rt.get('db_path') if isinstance(rt, dict) else None
+            enable_fts = rt.get('enable_fts', True) if isinstance(rt, dict) else True
+            if db_path:
+                db = BrainDB(db_path=db_path, enable_fts=enable_fts)
+                close_db = True
+        except Exception:
+            db = None
+    if db:
+        try:
+            memories = db.search_memories(prompt, limit=5)
+            context = "\n".join(m.get('content', '') for m in memories if m.get('content'))
+            if context:
+                prompt = f"Context:\n{context}\n\n{prompt}"
+        finally:
+            if close_db:
+                db.close()
     
     provider = model_config.get('provider', '').lower()
     if provider in OPENAI_COMPAT_PROVIDERS:

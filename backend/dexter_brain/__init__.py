@@ -5,6 +5,8 @@ from .campaigns import CampaignManager
 from .collaboration import CollaborationManager
 from .config import Config
 from .db import BrainDB
+from .memory import MemoryManager
+from .knowledge_graph import KnowledgeGraph
 from .error_healer import ErrorHealer
 from .error_tracker import ErrorTracker, ErrorSeverity
 from .enhanced_skills import create_and_test_skill_with_healing, get_sandbox_health_status
@@ -16,6 +18,8 @@ __all__ = [
     'CollaborationManager',
     'Config',
     'BrainDB',
+    'MemoryManager',
+    'KnowledgeGraph',
     'ErrorHealer',
     'ErrorTracker',
     'ErrorSeverity',
