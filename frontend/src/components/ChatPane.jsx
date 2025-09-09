@@ -18,6 +18,7 @@ export default function ChatPane(){
   })
   const [isMuted, setIsMuted] = React.useState(false)
   const recognitionRef = React.useRef(null)
+  const synthRef = React.useRef(window.speechSynthesis)
   
   React.useEffect(() => {
     loadCampaigns()
@@ -99,12 +100,20 @@ export default function ChatPane(){
       }
       
       setMsg('') 
-    }catch(e){ 
-      alert('Chat failed: '+(e?.response?.data?.detail||e.message)) 
-    } finally{ 
-      setBusy(false) 
-    } 
+  }catch(e){
+      alert('Chat failed: '+(e?.response?.data?.detail||e.message))
+    } finally{
+      setBusy(false)
+    }
   }
+
+  React.useEffect(() => {
+    if (!isMuted && reply) {
+      const utter = new SpeechSynthesisUtterance(reply)
+      synthRef.current.cancel()
+      synthRef.current.speak(utter)
+    }
+  }, [reply, isMuted])
   
   const startListening = () => {
     if (!speechSettings.enabled || !recognitionRef.current) return
@@ -128,8 +137,13 @@ export default function ChatPane(){
   }
   
   const toggleMute = () => {
-    setIsMuted(!isMuted)
-    // TODO: Implement actual TTS muting functionality
+    setIsMuted(m => {
+      const next = !m
+      if (next) {
+        synthRef.current.cancel()
+      }
+      return next
+    })
   }
   
   return (

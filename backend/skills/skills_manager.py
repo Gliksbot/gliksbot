@@ -205,9 +205,16 @@ class SkillsManager:
             True if skill was added successfully, False otherwise
         """
         try:
-            skill_file = self.skills_directory / f"{skill_name}.py"
+            safe_name = Path(skill_name).stem
+            if safe_name != skill_name or any(sep in skill_name for sep in ("/", "\\")):
+                raise ValueError("Invalid skill name")
+
+            skill_file = (self.skills_directory / f"{safe_name}.py").resolve()
+            if skill_file.parent != self.skills_directory.resolve():
+                raise ValueError("Invalid skill path")
+
             skill_file.write_text(skill_code, encoding='utf-8')
-            
+
             # Try to load the new skill
             self._load_skill(skill_file)
             

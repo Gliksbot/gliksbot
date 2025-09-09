@@ -240,6 +240,14 @@ class BrainDB:
         
         rows = self.fetchall(sql, tuple(params))
         return [self._row_to_dict(row) for row in rows]
+
+    def get_memories_by_tag(self, tag: str, limit: int = 100) -> List[Dict[str, Any]]:
+        """Retrieve memories that contain a specific tag."""
+        rows = self.fetchall(
+            "SELECT * FROM memories WHERE tags LIKE ? ORDER BY created_ts DESC LIMIT ?",
+            (f"%{tag}%", limit),
+        )
+        return [self._row_to_dict(row) for row in rows]
     
     def search_memories(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Search memories using full-text search."""

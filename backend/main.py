@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, Depends, HTTPException, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from contextlib import asynccontextmanager
 from pydantic import BaseModel
 
 # -----------------------------------------------------------------------------
@@ -84,10 +85,65 @@ except Exception as e:
 _error_tracker = ErrorTracker(max_errors=1000, persist_path="./logs/errors.jsonl")
 _error_healer: Optional[ErrorHealer] = None
 
-# NEW: Autonomous skill generation system  
+# NEW: Autonomous skill generation system
 _autonomy_mgr: Optional['AutonomyManager'] = None
 
-app = FastAPI(title="Dexter API v3", version="3.0", docs_url="/docs", redoc_url="/redoc")
+startup_time = time.time()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle application startup and shutdown."""
+    global _error_healer, _campaign_mgr, _autonomy_mgr
+    try:
+        if _db:
+            _campaign_mgr = CampaignManager(_db)
+            print("✅ Campaign manager initialized")
+        else:
+            print("⚠️  Campaign manager not initialized - database unavailable")
+
+        _error_healer = ErrorHealer(_app_cfg, _error_tracker, _collab_mgr)
+
+        if _skills_mgr and _collab_mgr:
+            from .dexter_brain.sandbox import create_sandbox
+            _autonomy_mgr = AutonomyManager(_app_cfg, _collab_mgr, _skills_mgr, create_sandbox)
+            print("✅ Autonomous skill generation system initialized")
+        else:
+            print("⚠️  Autonomy manager not initialized - missing dependencies")
+
+        asyncio.create_task(_error_healer.start_error_monitoring())
+        print("✅ Error tracking and healing system initialized")
+
+        _error_tracker.log_error(
+            "SYSTEM_STARTUP",
+            "Dexter v3 system started successfully with autonomous skill generation",
+            ErrorSeverity.LOW,
+            "system",
+            {
+                "sandbox_provider": _app_cfg.runtime.get('sandbox', {}).get('provider', 'unknown'),
+                "error_tracking_enabled": True,
+                "error_healing_enabled": True,
+                "autonomy_enabled": _autonomy_mgr is not None
+            },
+            auto_capture_traceback=False
+        )
+    except Exception as e:
+        print(f"❌ Failed to initialize systems: {e}")
+        _error_tracker.log_error(
+            "STARTUP_ERROR",
+            f"Failed to initialize systems: {e}",
+            ErrorSeverity.CRITICAL,
+            "system",
+        )
+
+    try:
+        yield
+    finally:
+        # Placeholder for any required cleanup
+        pass
+
+
+app = FastAPI(title="Dexter API v3", version="3.0", docs_url="/docs", redoc_url="/redoc", lifespan=lifespan)
 
 # NEW: Global exception handler for error tracking
 @app.exception_handler(Exception)
@@ -115,60 +171,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
     return JSONResponse(status_code=500, content={"error": "Internal server error", "error_id": error_id, "message": "Error has been logged"})
 
-# NEW: Startup event to initialize error healer
-startup_time = time.time()
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize error healing system when the application starts."""
-    global _error_healer, _campaign_mgr, _autonomy_mgr
-    try:
-        # Initialize campaign manager if database is available
-        if _db:
-            _campaign_mgr = CampaignManager(_db)
-            print("✅ Campaign manager initialized")
-        else:
-            print("⚠️  Campaign manager not initialized - database unavailable")
-        
-        # Initialize error healer
-        _error_healer = ErrorHealer(_app_cfg, _error_tracker, _collab_mgr)
-        
-        # Initialize autonomy manager
-        if _skills_mgr and _collab_mgr:
-            from .dexter_brain.sandbox import create_sandbox
-            _autonomy_mgr = AutonomyManager(_app_cfg, _collab_mgr, _skills_mgr, create_sandbox)
-            print("✅ Autonomous skill generation system initialized")
-        else:
-            print("⚠️  Autonomy manager not initialized - missing dependencies")
-        
-        # Start error monitoring task
-        asyncio.create_task(_error_healer.start_error_monitoring())
-        
-        print("✅ Error tracking and healing system initialized")
-        
-        # Log successful startup
-        _error_tracker.log_error(
-            "SYSTEM_STARTUP",
-            "Dexter v3 system started successfully with autonomous skill generation",
-            ErrorSeverity.LOW,
-            "system",
-            {
-                "sandbox_provider": _app_cfg.runtime.get('sandbox', {}).get('provider', 'unknown'),
-                "error_tracking_enabled": True,
-                "error_healing_enabled": True,
-                "autonomy_enabled": _autonomy_mgr is not None
-            },
-            auto_capture_traceback=False
-        )
-        
-    except Exception as e:
-        print(f"❌ Failed to initialize systems: {e}")
-        _error_tracker.log_error(
-            "STARTUP_ERROR",
-            f"Failed to initialize systems: {e}",
-            ErrorSeverity.CRITICAL,
-            "system"
-        )
 
 # Include API routers
 from .dexter_brain import events_api, collaboration_api, skills_api
@@ -217,6 +219,27 @@ class ChatOut(BaseModel):
 
 class ConfigOut(BaseModel):
     config: Dict[str, Any]
+
+
+class Credentials(BaseModel):
+    username: str
+    password: str
+
+
+class TokenOut(BaseModel):
+    token: str
+
+
+_auth_tokens: Dict[str, str] = {}
+
+
+def _require_token(authorization: str = Header(None)) -> str:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ", 1)[1]
+    if token not in _auth_tokens:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return _auth_tokens[token]
 
 # Enhanced health endpoint with sandbox status
 @app.get("/health", response_model=HealthOut)
@@ -316,6 +339,15 @@ async def test_sandbox(
             {"test_code": test_code[:200]}
         )
         raise HTTPException(status_code=500, detail=f"Sandbox test failed: {e}")
+
+
+@app.post("/auth/login", response_model=TokenOut)
+async def auth_login(credentials: Credentials):
+    """Authenticate user and return a simple bearer token."""
+    token = uuid.uuid4().hex
+    _auth_tokens[token] = credentials.username
+    return TokenOut(token=token)
+
 
 @app.get("/config", response_model=ConfigOut)
 def get_config():
@@ -1143,10 +1175,20 @@ def validate_model_config(name: str, config: Dict[str, Any]) -> List[str]:
     return errors
 
 @app.get("/history")
-async def get_chat_history():
-    """Get chat history - placeholder implementation"""
-    # TODO: Implement actual chat history storage/retrieval
-    return {"interactions": []}
+async def get_chat_history(limit: int = 50):
+    """Return recent chat history from memory."""
+    if _db is None:
+        return {"interactions": []}
+
+    memories = _db.get_memories_by_tag("chat", limit=limit)
+    interactions = [
+        {
+            "content": m.get("content", ""),
+            "timestamp": m.get("metadata", {}).get("timestamp"),
+        }
+        for m in reversed(memories)
+    ]
+    return {"interactions": interactions}
 
 # Helper functions
 def _build_memory_context(user_input: str) -> str:
