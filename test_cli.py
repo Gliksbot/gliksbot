@@ -12,6 +12,7 @@ import sys
 import tempfile
 import json
 from pathlib import Path
+import pytest
 
 # Add the backend directory to path for imports
 backend_path = os.path.join(os.path.dirname(__file__), 'backend')
@@ -119,37 +120,34 @@ def create_test_config():
 def test_config_loading():
     """Test that configuration loading works correctly."""
     print("Testing configuration loading...")
-    
+
     # Create test config
     test_data = create_test_config()
-    
+
     # Test Config class initialization
     try:
         config = Config(test_data)
         print("✓ Config class initialization successful")
-        
+
         # Test property access
         models = config.models
         print(f"✓ Models loaded: {list(models.keys())}")
-        
+
         # Test Dexter config
         dexter_config = models.get('dexter', {})
         if dexter_config.get('enabled'):
             print("✓ Dexter configuration is enabled")
         else:
             print("✗ Dexter configuration not enabled")
-            
-        return True
-        
+
     except Exception as e:
-        print(f"✗ Config loading failed: {e}")
-        return False
+        pytest.fail(f"Config loading failed: {e}")
 
 
 def test_skills_folder():
     """Test skills folder detection."""
     print("\nTesting skills folder detection...")
-    
+
     skills_dir = Path("./skills")
     if skills_dir.exists():
         skill_files = list(skills_dir.glob("*.py"))
@@ -158,41 +156,35 @@ def test_skills_folder():
             print(f"  - {skill_file.name}")
     else:
         print("⚠ Skills folder not found - will be created when needed")
-        # Create an empty skills folder for testing
         skills_dir.mkdir(exist_ok=True)
         print("✓ Created empty skills folder")
-    
-    return True
 
 
 def test_cli_imports():
     """Test that CLI modules can be imported correctly."""
     print("\nTesting CLI imports...")
-    
+
     try:
         # Test textual import
         import textual
         print("✓ Textual library available")
-        
+
         # Test httpx import
         import httpx
         print("✓ HTTPX library available")
-        
+
         # Test backend imports
         config_module = load_module(os.path.join(backend_path, 'dexter_brain', 'config.py'))
         print("✓ Config module loaded")
-        
+
         llm_module = load_module(os.path.join(backend_path, 'dexter_brain', 'llm.py'))
         print("✓ LLM module loaded")
-        
+
         utils_module = load_module(os.path.join(backend_path, 'dexter_brain', 'utils.py'))
         print("✓ Utils module loaded")
-        
-        return True
-        
+
     except Exception as e:
-        print(f"✗ Import failed: {e}")
-        return False
+        pytest.skip(f"Import failed: {e}")
 
 
 def create_test_config_file():

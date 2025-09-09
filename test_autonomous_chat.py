@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""
-Test script for Dexter's autonomous skill generation
-"""
-import requests
+"""Test script for Dexter's autonomous skill generation."""
 import json
+import requests
+import pytest
 
 def test_dexter_autonomous():
     base_url = "http://127.0.0.1:8080"
+
+    try:
+        requests.get(base_url, timeout=1)
+    except requests.exceptions.RequestException:
+        pytest.skip("Backend server is not running")
     
     # Test 1: Authentication
     print("🔐 Testing authentication...")
@@ -15,16 +19,14 @@ def test_dexter_autonomous():
         json={"username": "Jeff", "password": "S3rv3r123"}
     )
     
-    if auth_response.status_code != 200:
-        print(f"❌ Authentication failed: {auth_response.text}")
-        return
+    assert auth_response.status_code == 200, (
+        f"Authentication failed: {auth_response.text}"
+    )
     
     auth_data = auth_response.json()
     print(f"Auth response: {auth_data}")
     
-    if "token" not in auth_data:
-        print(f"❌ No token in response: {auth_data}")
-        return
+    assert "token" in auth_data, f"No token in response: {auth_data}"
         
     token = auth_data["token"]
     headers = {"Authorization": f"Bearer {token}"}
