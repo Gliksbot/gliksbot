@@ -50,6 +50,9 @@ class SkillsManager:
                 self._load_skill(file_path)
             except Exception as e:
                 logger.error(f"Failed to load skill {file_path.name}: {e}")
+
+        # Register built-in skills that do not come from files
+        self._register_system_info_skill()
     
     def _load_skill(self, file_path: Path) -> None:
         """Load a single skill module from file"""
@@ -237,11 +240,30 @@ class SkillsManager:
             
             logger.info(f"Successfully removed skill: {skill_name}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to remove skill {skill_name}: {e}")
             return False
-    
+
     def skill_exists(self, skill_name: str) -> bool:
         """Check if a skill exists"""
         return skill_name in self.loaded_skills
+
+    def _register_system_info_skill(self) -> None:
+        """Register a built-in skill exposing basic OS and Python info"""
+
+        def _system_info(_message: str) -> Dict[str, Any]:
+            return {
+                'success': True,
+                'skill_name': 'system_info',
+                'platform': sys.platform,
+                'cwd': os.getcwd(),
+                'python_version': sys.version,
+            }
+
+        self.loaded_skills['system_info'] = {
+            'module': None,
+            'path': 'builtin',
+            'name': 'system_info',
+            'run_function': _system_info,
+        }
