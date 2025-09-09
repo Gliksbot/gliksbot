@@ -82,15 +82,10 @@ function Ensure-Python-Venv-And-Install($root) {
       python -m venv .venv
     }
     & .\.venv\Scripts\python -m pip install --upgrade pip
-    # Install root requirements if present
+    # Install requirements if present
     if (Test-Path "$root\requirements.txt") {
-      Write-Info "Installing root requirements.txt..."
+      Write-Info "Installing requirements.txt..."
       & .\.venv\Scripts\pip install -r "$root\requirements.txt"
-    }
-    # Install backend requirements
-    if (Test-Path "$root\backend\requirements.txt") {
-      Write-Info "Installing backend/requirements.txt..."
-      & .\.venv\Scripts\pip install -r "$root\backend\requirements.txt"
     }
   } finally {
     Pop-Location

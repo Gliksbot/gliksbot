@@ -4,7 +4,7 @@ Install and run Dexter backend (Windows PowerShell).
 This script performs the following tasks:
 1. Ensures Python 3.11+ is installed.
 2. Creates a Python virtual environment in the project root if none exists.
-3. Installs all backend dependencies from ``backend/requirements.txt``.
+3. Installs all backend dependencies from ``requirements.txt``.
 4. Starts the FastAPI backend using uvicorn with the fully qualified module name
    to avoid import errors (``backend.main:app``).
 
@@ -41,13 +41,13 @@ function Setup-Venv-And-Install {
     $venvPip    = Join-Path ".venv" "Scripts\pip.exe"
     # Upgrade pip
     & $venvPython -m pip install --upgrade pip
-    # Install backend requirements
-    $reqFile = Join-Path "backend" "requirements.txt"
+    # Install project requirements
+    $reqFile = "requirements.txt"
     if (Test-Path $reqFile) {
         Write-Info "Installing backend dependencies from $reqFile..."
         & $venvPip install -r $reqFile
     } else {
-        Write-Warn "Could not find backend/requirements.txt; skipping installation."
+        Write-Warn "Could not find requirements.txt; skipping installation."
     }
 }
 
