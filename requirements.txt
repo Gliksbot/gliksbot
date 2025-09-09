@@ -10,6 +10,17 @@ pydantic>=2.0.0
 httpx>=0.25.0
 python-multipart>=0.0.6
 
+# Networking and Async Utilities
+aiofiles>=23.2.1
+aiohttp>=3.9.0
+requests>=2.31.0
+
+# CLI Interface
+textual>=0.58.1
+
+# Windows Service Support
+pywin32>=306; platform_system == "Windows"
+
 # Database and Data Handling
 aiosqlite>=0.19.0
 pyyaml>=6.0
